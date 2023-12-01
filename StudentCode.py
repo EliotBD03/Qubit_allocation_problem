@@ -140,6 +140,11 @@ best_layout = hill_climbing(layout)
 print(f"{best_layout}")
 print(f"n={n}, m={m} et fitness_test={fitness(best_layout)}. Instance {instance_num} ok !")
 
+"""
+Current best results :
+[19, 9, 16, 10, 4, 1, 5, 14, 12, 7, 15, 3, 11, 2, 0, 18, 13, 8, 17, 6]
+n=20, m=27 et fitness_test=63. Instance 1 ok !
+"""
 def simulated_annealing(layout1, layout2, T=1):
     fitness1 = fitness(layout1)
     fitness2 = fitness(layout2)
