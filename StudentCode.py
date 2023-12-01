@@ -14,7 +14,7 @@ from qiskit.providers.fake_provider import FakeSingaporeV2,FakeWashingtonV2,Fake
 ##-------------------------------------------------------
 ##     Definition de la fonction objetif à minimiser
 ##-------------------------------------------------------
-def fitness(layout) -> list:
+def fitness(layout) -> int:
     init_layout={qr[i]:layout[i] for i in range(len(layout))}
     init_layout=Layout(init_layout)
 
@@ -96,6 +96,26 @@ m=backend.num_qubits
 # La metaheuristique ne doit se baser que sur le layout et la fonction fitness.
 import random
 
+def generate_new_layout_swap_two(layout):
+    """
+    Generate a new layout by swapping two elements of the layout
+    """
+    new_layout = list(layout)
+    i = np.random.randint(0, n)
+    j = np.random.randint(0, n)
+    new_layout[i], new_layout[j] = new_layout[j], new_layout[i]
+    return new_layout
+
+def generate_new_layout_from_parents(layout1, layout2):
+    """
+    Generate a new layout by generating a new permutation of the two parents
+    """
+    new_layout = list(layout1)
+    for i in range(n):
+        if np.random.rand() < 0.5:
+            new_layout[i] = layout2[i] if layout2[i] not in new_layout else layout1[i]
+    return new_layout
+    
 layout = list(range(n))
 fitness(layout)
 
@@ -109,8 +129,7 @@ def hill_climbing(layout):
     best_fitness = fitness(layout)
     best_layout = layout
     for i in range(10):
-        new_layout = list(layout)
-        random.shuffle(new_layout)
+        new_layout = generate_new_layout_swap_two(layout)
         new_fitness = fitness(new_layout)
         if new_fitness < best_fitness:
             best_fitness = new_fitness
@@ -118,6 +137,32 @@ def hill_climbing(layout):
     return best_layout
 
 best_layout = hill_climbing(layout)
+print(f"{best_layout}")
+print(f"n={n}, m={m} et fitness_test={fitness(best_layout)}. Instance {instance_num} ok !")
+
+def simulated_annealing(layout1, layout2, T=1):
+    fitness1 = fitness(layout1)
+    fitness2 = fitness(layout2)
+    best_fitness = min(fitness1, fitness2)
+    best_layout = layout1 if fitness1 < fitness2 else layout2
+    for i in range(10000):
+        new_layout1 = generate_new_layout_swap_two(layout1)
+        new_layout2 = generate_new_layout_swap_two(layout2)
+        new_fitness1 = fitness(new_layout1)
+        new_fitness2 = fitness(new_layout2)
+        if min(new_fitness1, new_fitness2) < best_fitness:
+            best_fitness = min(new_fitness1, new_fitness2)
+            best_layout = new_layout1 if new_fitness1 < new_fitness2 else new_layout2
+
+        # Metropolis-Hastings (see : https://en.wikipedia.org/wiki/Metropolis%E2%80%93Hastings_algorithm)
+        elif np.random.rand() < np.exp((best_fitness - max(new_fitness1, new_fitness2)) / T):
+            best_fitness = max(new_fitness1, new_fitness2)
+            best_layout = new_layout2 if new_fitness1 < new_fitness2 else new_layout1
+    return best_layout
+
+layout1 = np.random.permutation(n)
+layout2 = np.random.permutation(n)
+best_layout = simulated_annealing(layout1, layout2)
 print(f"{best_layout}")
 print(f"n={n}, m={m} et fitness_test={fitness(best_layout)}. Instance {instance_num} ok !")
 
