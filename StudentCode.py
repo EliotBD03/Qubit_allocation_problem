@@ -77,7 +77,7 @@ def instance_selection(instance_num):
 ##     Pour choisir une instance: 
 ##     Modifier instance_num ET RIEN D'AUTRE    
 ##-------------------------------------------------------
-instance_num=9     #### Entre 1 et 9 inclue
+instance_num=1     #### Entre 1 et 9 inclue
 
 backend_name,circuit_type,num_qubit=instance_selection(instance_num)
 backend,qc,qr=instance_characteristic(backend_name,circuit_type,num_qubit)
@@ -123,7 +123,7 @@ def VNS_Main(n:int):
     changed = False
     
     currBestList = list(range(n))
-    currMax = fitness(currBestList)
+    currMin = fitness(currBestList)
     # Initial Solution
     while currNeighFinished < nbOfNeigh:
         #print(currNeighFinished)
@@ -135,20 +135,20 @@ def VNS_Main(n:int):
             
             curr = fitness(neighbor)
             #print(str(neighbor) +": " + str(curr))
-            if curr > currMax:
+            if curr < currMin:
                 changed = True
                 print("Previous: " + str(currBestList))
-                print("NEW BEST !!!\n From :" + str(currMax) + " to " + str(curr))
+                print("NEW BEST !!!\n From :" + str(currMin) + " to " + str(curr))
                 print("New: " + str(neighbor))
                 print("______________________________________________")
-                currMax = curr
+                currMin = curr
                 currBestList = copy(neighbor)
         if not changed:
             currNeighFinished += 1
         elif currNeighFinished > 0:
             currNeighFinished -= 1
 
-    return (currBestList, currMax)
+    return (currBestList, currMin)
 
 def nextInversionNeighbor(l, n):
     nextList = copy(l)
