@@ -22,7 +22,7 @@ def fitness(layout) -> int:
     pm.layout.remove(1)
     pm.layout.remove(1)
 
-    QC=pm.run(qc)
+    QC=pm.run(deepcopy(qc))
     return QC.depth()
 
 ##-------------------------------------------------------
@@ -94,13 +94,15 @@ m=backend.num_qubits
 # Depuis ce code, on sait que la solution est de la forme [0,1,2,...,n-1].
 # On peut donc tester la fonction fitness sur cette solution et optimiser son resultat.
 # La metaheuristique ne doit se baser que sur le layout et la fonction fitness.
-import random
+import time
+from copy import deepcopy
+
 
 def generate_new_layout_swap_two(layout):
     """
     Generate a new layout by swapping two elements of the layout
     """
-    new_layout = list(layout)
+    new_layout = deepcopy(layout)
     i = np.random.randint(0, n)
     j = np.random.randint(0, n)
     new_layout[i], new_layout[j] = new_layout[j], new_layout[i]
@@ -121,7 +123,7 @@ fitness(layout)
 
 print(f"n={n}, m={m} et fitness_test={fitness(layout)}. Instance {instance_num} ok !")
 
-random.shuffle(layout)
+np.random.shuffle(layout)
 fitness(layout)
 print(f"n={n}, m={m} et fitness_test={fitness(layout)}. Instance {instance_num} ok !")
 
@@ -145,31 +147,75 @@ Current best results :
 [19, 9, 16, 10, 4, 1, 5, 14, 12, 7, 15, 3, 11, 2, 0, 18, 13, 8, 17, 6]
 n=20, m=27 et fitness_test=63. Instance 1 ok !
 """
-def simulated_annealing(layout1, layout2, T=1):
+def simulated_annealing(layout, T=1, alpha=0.99, time_limit=10, return_results=[]):
+    _b_time = time.time()
+    layout1 = deepcopy(layout)
     fitness1 = fitness(layout1)
-    fitness2 = fitness(layout2)
-    best_fitness = min(fitness1, fitness2)
-    best_layout = layout1 if fitness1 < fitness2 else layout2
-    for i in range(10000):
+    best_fitness = fitness1
+    best_layout = layout1
+    bests_list = [(best_layout, best_fitness)]
+    for _ in range(1000):
         new_layout1 = generate_new_layout_swap_two(layout1)
-        new_layout2 = generate_new_layout_swap_two(layout2)
         new_fitness1 = fitness(new_layout1)
-        new_fitness2 = fitness(new_layout2)
-        if min(new_fitness1, new_fitness2) < best_fitness:
-            best_fitness = min(new_fitness1, new_fitness2)
-            best_layout = new_layout1 if new_fitness1 < new_fitness2 else new_layout2
+        if new_fitness1 < fitness1:
+            layout1 = new_layout1
+            fitness1 = new_fitness1
+            if fitness1 < best_fitness:
+                best_fitness = fitness1
+                best_layout = layout1
+                bests_list.append((best_layout, best_fitness))
+        else:
+            if np.random.rand() < np.exp((fitness1 - new_fitness1) / T):
+                layout1 = new_layout1
+                fitness1 = new_fitness1
+                bests_list.append((layout1, fitness1))
+        T *= alpha
 
-        # Metropolis-Hastings (see : https://en.wikipedia.org/wiki/Metropolis%E2%80%93Hastings_algorithm)
-        elif np.random.rand() < np.exp((best_fitness - max(new_fitness1, new_fitness2)) / T):
-            best_fitness = max(new_fitness1, new_fitness2)
-            best_layout = new_layout2 if new_fitness1 < new_fitness2 else new_layout1
-    return best_layout
+        if time.time() - _b_time > time_limit:
+            break
+    if return_results is not None:
+        for best_layout, best_fitness in bests_list:
+            return_results.append((best_layout.tolist(), best_fitness))
+    return bests_list
 
 layout1 = np.random.permutation(n)
-layout2 = np.random.permutation(n)
-best_layout = simulated_annealing(layout1, layout2)
-print(f"{best_layout}")
-print(f"n={n}, m={m} et fitness_test={fitness(best_layout)}. Instance {instance_num} ok !")
+bests = simulated_annealing(layout1, T=10, alpha=0.99, time_limit=100)
+print(f"Best layouts found after diversification :")
+for best_layout, best_fitness in bests:
+    print(f"{best_layout}")
+    print(f"n={n}, m={m} et fitness_test={best_fitness}. Instance {instance_num} !")
+
+import threading
+
+# Multi thread simulated annealing intensification for all the best layouts found
+def multi_thread_simulated_annealing_intensification(bests, T=1, alpha=0.99, time_limit=100):
+    threads = []
+    results = [[] for _ in range(5)]
+    bests_five = deepcopy(bests) 
+    bests_five.sort(key=lambda x: x[1])
+    bests_five = bests_five[:5]
+    print(f"bests_five : {bests_five}")
+    print("Starting threads...")
+    for i in range(min(5, len(bests))):
+        threads.append(threading.Thread(target=simulated_annealing, args=(bests_five[i][0], deepcopy(T), deepcopy(alpha), time_limit, results[i])))
+        threads[i].start()
+    for i in range(min(5, len(bests))):
+        threads[i].join()
+        # Print the best layout found by each thread
+    print("Best layouts found after intensification :")
+    end_results = []
+    for i in range(len(results)):
+        end_results += results[i]
+
+    for (best_layout, best_fitness) in end_results:
+            print(f"{best_layout}")
+            print(f"n={n}, m={m} et fitness_test={best_fitness}. Instance {instance_num} !")
+
+    end_results.sort(key=lambda x: x[1])
+    print(f"Final best layout and cost : {min(end_results, key=lambda x: x[0][1])}")
+multi_thread_simulated_annealing_intensification(bests, T=1, alpha=0.8, time_limit=100)
+
+
 
 ###### A faire : un algo d'optimisation qui minimise la fonction fitness,
 ###### fonction qui accepte en entrée :
