@@ -77,7 +77,7 @@ def instance_selection(instance_num):
 ##     Pour choisir une instance: 
 ##     Modifier instance_num ET RIEN D'AUTRE    
 ##-------------------------------------------------------
-instance_num=1     #### Entre 1 et 9 inclue
+instance_num=9     #### Entre 1 et 9 inclue
 
 backend_name,circuit_type,num_qubit=instance_selection(instance_num)
 backend,qc,qr=instance_characteristic(backend_name,circuit_type,num_qubit)
@@ -95,31 +95,99 @@ m=backend.num_qubits
 # On peut donc tester la fonction fitness sur cette solution et optimiser son resultat.
 # La metaheuristique ne doit se baser que sur le layout et la fonction fitness.
 import random
+from copy import copy
 
-layout = list(range(n))
-fitness(layout)
+def VNS_Main(n:int):
+    """
+        Main method using the VNS method.
 
-print(f"n={n}, m={m} et fitness_test={fitness(layout)}. Instance {instance_num} ok !")
+        Neighborhoods used on permutations:
 
-random.shuffle(layout)
-fitness(layout)
-print(f"n={n}, m={m} et fitness_test={fitness(layout)}. Instance {instance_num} ok !")
+                - Inversion
+                - Permutation
+                - Movement -> not yet
 
-def hill_climbing(layout):
-    best_fitness = fitness(layout)
-    best_layout = layout
-    for i in range(10):
-        new_layout = list(layout)
-        random.shuffle(new_layout)
-        new_fitness = fitness(new_layout)
-        if new_fitness < best_fitness:
-            best_fitness = new_fitness
-            best_layout = new_layout
-    return best_layout
+        Parameters
+        ----------
+        :param n: int
 
-best_layout = hill_climbing(layout)
-print(f"{best_layout}")
-print(f"n={n}, m={m} et fitness_test={fitness(best_layout)}. Instance {instance_num} ok !")
+        Returns
+        -------
+    """
+    neighborList = [nextInversionNeighbor,
+                    nextPermutationNeighbor]
+    nbOfNeigh = 2
+    currNeighFinished = 0
+    currNeighb = 0
+    curr = 0
+    changed = False
+    
+    currBestList = list(range(n))
+    currMax = fitness(currBestList)
+    # Initial Solution
+    while currNeighFinished < nbOfNeigh:
+        #print(currNeighFinished)
+        neighborhood = neighborList[(currNeighb + 1)%nbOfNeigh]
+        
+        currNeighb += 1
+        changed = False
+        for neighbor in neighborhood(currBestList,n):
+            
+            curr = fitness(neighbor)
+            #print(str(neighbor) +": " + str(curr))
+            if curr > currMax:
+                changed = True
+                print("Previous: " + str(currBestList))
+                print("NEW BEST !!!\n From :" + str(currMax) + " to " + str(curr))
+                print("New: " + str(neighbor))
+                print("______________________________________________")
+                currMax = curr
+                currBestList = copy(neighbor)
+        if not changed:
+            currNeighFinished += 1
+        elif currNeighFinished > 0:
+            currNeighFinished -= 1
+
+    return (currBestList, currMax)
+
+def nextInversionNeighbor(l, n):
+    nextList = copy(l)
+    for i in range(0,n-1):
+        swap(nextList,i,i+1)
+        yield nextList
+        swap(nextList, i+1,i)
+
+def nextPermutationNeighbor(l,n):
+    nextList = copy(l)
+    for i in range(n-1) :
+        for j in range(i+1,n):
+            swap(nextList,i,j)
+            yield nextList
+            swap(nextList,j,i)
+
+def nextMovementNeighbor(l,n):
+    """
+        TODO: Change cause this currently doesn't work + horrible complexity
+    """
+    for i in range(n-1, 0, -1):
+        nextList = copy(l)
+        for j in range(n-1):
+            nextList = copy(l)
+            #print("swap(" + str(i) + "," + str(j) + ")")
+            swap(nextList,i , j)
+            for k in range(j+1, i):
+                #print("_______swap(" + str(i) + "," + str(k) + ")")
+                swap(nextList, i, k)
+            yield nextList
+
+def swap(l,i,j):
+    l[i],l[j] = l[j], l[i]
+
+#for v in nextInversionNeighbor(list(range(n)), 20):
+#    print(v)
+   
+
+print(VNS_Main(n))
 
 ###### A faire : un algo d'optimisation qui minimise la fonction fitness,
 ###### fonction qui accepte en entrée :
