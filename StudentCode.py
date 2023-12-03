@@ -77,7 +77,7 @@ def instance_selection(instance_num):
 ##     Pour choisir une instance: 
 ##     Modifier instance_num ET RIEN D'AUTRE    
 ##-------------------------------------------------------
-instance_num=1     #### Entre 1 et 9 inclue
+instance_num= 6     #### Entre 1 et 9 inclue
 
 backend_name,circuit_type,num_qubit=instance_selection(instance_num)
 backend,qc,qr=instance_characteristic(backend_name,circuit_type,num_qubit)
@@ -97,7 +97,7 @@ m=backend.num_qubits
 import random
 from copy import copy
 
-def VNS_Main(n:int):
+def VNS_AxelVersion(n:int):
     """
         Main method using the VNS method.
 
@@ -105,7 +105,7 @@ def VNS_Main(n:int):
 
                 - Inversion
                 - Permutation
-                - Movement -> not yet
+                - Movement
 
         Parameters
         ----------
@@ -115,40 +115,78 @@ def VNS_Main(n:int):
         -------
     """
     neighborList = [nextInversionNeighbor,
-                    nextPermutationNeighbor]
-    nbOfNeigh = 2
+                    nextMovementNeighbor,
+                    nextPermutationNeighbor
+                    ]
+    nbOfNeigh = len(neighborList)
+    alreadyVisited = [[]] * nbOfNeigh
+
     currNeighFinished = 0
     currNeighb = 0
-    curr = 0
     changed = False
     
-    currBestList = list(range(n))
+    currBestList = np.random.permutation(n)
     currMin = fitness(currBestList)
     # Initial Solution
     while currNeighFinished < nbOfNeigh:
-        #print(currNeighFinished)
+        print(currNeighFinished)
         neighborhood = neighborList[(currNeighb + 1)%nbOfNeigh]
+        skip = False
+        try:
+            alreadyVisited[(currNeighb + 1)%nbOfNeigh].index(currBestList)
+        except ValueError:
+            currNeighFinished += 1
+            skip = True
+        if skip:
+            pass
+            
         
+        alreadyVisited[(currNeighb + 1)%nbOfNeigh].append(currBestList)
         currNeighb += 1
         changed = False
-        for neighbor in neighborhood(currBestList,n):
-            
-            curr = fitness(neighbor)
-            #print(str(neighbor) +": " + str(curr))
-            if curr < currMin:
-                changed = True
-                print("Previous: " + str(currBestList))
-                print("NEW BEST !!!\n From :" + str(currMin) + " to " + str(curr))
-                print("New: " + str(neighbor))
-                print("______________________________________________")
-                currMin = curr
-                currBestList = copy(neighbor)
+        bestNeighbor = Local_Search(neighborhood, currBestList, n)
+        if bestNeighbor[1] < currMin:
+            print("NEW BEST !!!\n From :" + str(currMin) + " to " + str(bestNeighbor[1]))    
+            print("Previous: " + str(currBestList))
+            print("New:      " + str(bestNeighbor[0]))
+            print("______________________________________________")
+            currBestList = bestNeighbor[0]
+            currMin = bestNeighbor[1]
+
         if not changed:
             currNeighFinished += 1
         elif currNeighFinished > 0:
-            currNeighFinished -= 1
+            currNeighFinished = 0
 
     return (currBestList, currMin)
+
+def VNS_Real(size: int, nList: list):
+    i = 0
+    nSize = len(nList)
+
+    s = random.sample(range(0,size), size)
+    best = (s,fitness(s))
+    shakedSol = []
+    bestShakedSol = []
+    while i < nSize:
+        print("New iteration !\n i = " + str(i))
+        shakedSol = ShakeSol(best[0], nList[i], size)
+        bestShakedSol = Local_Search(nList[i], shakedSol, size)
+        if (bestShakedSol[1] < best[1]):
+            print("NEW BEST !!!\n From :" + str(best[1]) + " to " + str(bestShakedSol[1]))    
+            print("Previous: " + str(best[0]))
+            print("New:      " + str(bestShakedSol[0]))
+            print("______________________________________________")
+            best = bestShakedSol
+            i = 0
+        else:
+            i += 1
+
+    return best
+
+def ShakeSol(s, neighborhood, size):
+    neighbors = [n.copy() for n in neighborhood(s, size)]
+    return neighbors[random.randint(0,len(neighbors)-1)]
 
 def nextInversionNeighbor(l, n):
     nextList = copy(l)
@@ -159,35 +197,77 @@ def nextInversionNeighbor(l, n):
 
 def nextPermutationNeighbor(l,n):
     nextList = copy(l)
-    for i in range(n-1) :
+    for i in range(n) :
         for j in range(i+1,n):
             swap(nextList,i,j)
             yield nextList
             swap(nextList,j,i)
 
 def nextMovementNeighbor(l,n):
-    """
-        TODO: Change cause this currently doesn't work + horrible complexity
-    """
+    nextList = list(copy(l))
     for i in range(n-1, 0, -1):
-        nextList = copy(l)
-        for j in range(n-1):
-            nextList = copy(l)
-            #print("swap(" + str(i) + "," + str(j) + ")")
-            swap(nextList,i , j)
-            for k in range(j+1, i):
-                #print("_______swap(" + str(i) + "," + str(k) + ")")
-                swap(nextList, i, k)
+        for j in range(n):
+            curr = nextList.pop(i)
+            curr = nextList.insert(j,curr)
             yield nextList
+            nextList = list(copy(l))
+            
 
 def swap(l,i,j):
     l[i],l[j] = l[j], l[i]
 
 #for v in nextInversionNeighbor(list(range(n)), 20):
 #    print(v)
-   
+#________________________________________________________________________________________________________
+def GRASP(size, maxIteration) -> tuple:
 
-print(VNS_Main(n))
+    BestSolution = ([],float('inf'))
+    currSolution = ([],0)
+    currIteration = 1
+    while(maxIteration > 0):
+        print("========================================================")
+        print("New Iteration Of Grasp: " + str(currIteration))
+        currIteration += 1
+        print("========================================================")
+        # Construction
+        sol = Greedy_Randomized_Construction(size)
+
+        # Local Search
+        currSolution = Local_Search(nextPermutationNeighbor,sol,size)
+
+        # Update Solution
+        if currSolution[1] < BestSolution[1]:
+            print("NEW BEST !!!\n From :" + str(BestSolution[1]) + " to " + str(currSolution[1]))    
+            print("Previous: " + str(BestSolution[0]))
+            print("New: " + str(currSolution[1]))
+            print("______________________________________________")
+            BestSolution = currSolution
+
+        maxIteration -= 1
+    return BestSolution
+
+def Greedy_Randomized_Construction(size):
+    
+    return random.sample(range(0,size), size)
+
+
+def Local_Search(neighborhood, sol: list,size: int):
+    curr = 0
+    currBestList = []
+    currMin = float('inf')
+    for neighbor in neighborhood(sol,size):
+            curr = fitness(neighbor)
+            if curr < currMin:
+                currMin = curr
+                currBestList = copy(neighbor)
+    #print("     Local search result: " + str(currMin))
+    return (currBestList, currMin)
+
+
+print(VNS_Real(n, [nextInversionNeighbor, nextPermutationNeighbor, nextMovementNeighbor]))
+#for i in nextMovementNeighbor(list(range(4)), 4):
+#    print(i)
+
 
 ###### A faire : un algo d'optimisation qui minimise la fonction fitness,
 ###### fonction qui accepte en entrée :
