@@ -153,7 +153,7 @@ Current best results :
 [19, 9, 16, 10, 4, 1, 5, 14, 12, 7, 15, 3, 11, 2, 0, 18, 13, 8, 17, 6]
 n=20, m=27 et fitness_test=63. Instance 1 ok !
 """
-def simulated_annealing(layout, T=1, alpha=0.99, time_limit=10, return_results=[], qr=qr, qc=qc, backend=backend, _type=1):
+def simulated_annealing(layout, T=1, alpha=0.99, time_limit=10, return_results=[], qr=qr, qc=qc, backend=backend, _type=1, instance=1):
     """
     Simulated annealing algorithm for the layout problem
 
@@ -178,6 +178,7 @@ def simulated_annealing(layout, T=1, alpha=0.99, time_limit=10, return_results=[
     type : int, optional
         The type of simulated annealing to use. The default is 1 (swap two elements, intensification). Other values are 2 (generate a new random layout, diversification).
     """
+    print(f"Starting simulated annealing... Type : {_type}. Instance {instance}")
     _b_time = time.time()
     layout1 = layout.copy()
     T_copy = deepcopy(T)
@@ -187,6 +188,8 @@ def simulated_annealing(layout, T=1, alpha=0.99, time_limit=10, return_results=[
     bests_list = [(best_layout, best_fitness)]
 
     rand_values = np.random.rand(int(time_limit / alpha)).tolist()  # Precompute random values
+
+    print(f"Simulated annealing starting for instance {instance}...")
 
     while time.time() - _b_time < time_limit:
         # Generate a new layout
@@ -211,6 +214,8 @@ def simulated_annealing(layout, T=1, alpha=0.99, time_limit=10, return_results=[
     if return_results is not None:
         return_results.extend(bests_list)
 
+    print(f"Simulated annealing done for instance {instance} !")
+
     return bests_list
 
 # layout1 = np.random.permutation(n)
@@ -220,7 +225,7 @@ def simulated_annealing(layout, T=1, alpha=0.99, time_limit=10, return_results=[
 #     print(f"{best_layout}")
 #     print(f"n={n}, m={m} et fitness_test={best_fitness}. Instance {instance_num} !")
 
-import concurrent.futures
+import threading
 
 # Multi thread simulated annealing intensification for all the best layouts found
 def multi_thread_simulated_annealing_intensification(bests, T=1, alpha=0.99, time_limit=100, n=n, file=None, qc=qc, qr=qr, backend=backend, instance=instance_num):
@@ -233,12 +238,12 @@ def multi_thread_simulated_annealing_intensification(bests, T=1, alpha=0.99, tim
     if file is not None:
         file.write(f"\n\nStarting threads for intensification of 5 bests...\n")
     print("Starting threads...")
-    with concurrent.futures.ThreadPoolExecutor() as executor:
-        for i in range(min(5, len(bests))):
-            threads.append(executor.submit(simulated_annealing, bests_five[i][0], T=T, alpha=alpha, time_limit=time_limit, return_results=results[i], qr=deepcopy(qr), qc=deepcopy(qc), backend=deepcopy(backend)))
+    for i in range(min(5, len(bests))):
+        threads.append(threading.Thread(target=simulated_annealing, args=(bests_five[i][0], T, alpha, time_limit, results[i], qr, qc, backend, 1, instance)))
+        threads[-1].start()
         
-        for thread in threads:
-            thread.result()
+    for thread in threads:
+        thread.join()
 
     # Print the best layout found by each thread
     if file is not None:
@@ -264,8 +269,12 @@ def multi_thread_simulated_annealing_intensification(bests, T=1, alpha=0.99, tim
 
 
 def run_all_instances():
-    with concurrent.futures.ThreadPoolExecutor() as executor:
-        executor.map(run_instance, range(1, 10))
+    threads = []
+    for i in range(1, 10):
+        threads.append(threading.Thread(target=run_instance, args=(i,)))
+        threads[-1].start()
+    for thread in threads:
+        thread.join()
 
 def run_instance(instance_num):
     print(f"Running instance {instance_num}...")
@@ -283,7 +292,9 @@ def run_instance(instance_num):
     file.write(f"Random : f{layout}\n")
     file.write(f"n={n}, m={m} et fitness_test={f1}. Instance {instance_num} ok !\n----------------\n")
 
-    bests = simulated_annealing(layout, T=10, alpha=0.99, time_limit=150, qr=deepcopy(qr), qc=deepcopy(qc), backend=deepcopy(backend), _type=2)
+    file.write(f"Beginning diversification for instance {instance_num}...\n")
+    print(f"Beginning diversification for instance {instance_num}...")
+    bests = simulated_annealing(layout, T=100, alpha=0.9, time_limit=300, qr=deepcopy(qr), qc=deepcopy(qc), backend=deepcopy(backend), _type=1, instance=instance_num)
     print(f"Diversification done for instance {instance_num} !")
     file.write(f"\n\nBest layouts found after diversification :\n")
     for (best_layout, best_fitness) in bests:
@@ -292,7 +303,7 @@ def run_instance(instance_num):
 
     bests.sort(key=lambda x: x[1])
 
-    best_layouts = bests[:5]
+    best_layouts = bests[:3] + bests[-2:] # Keep the 3 bests and the 2 worsts
 
     bests_intensification = [[] for _ in range(min(5, len(best_layouts)))]
     threads = []
@@ -301,9 +312,10 @@ def run_instance(instance_num):
     file.write(f"\n5 bests : {best_layouts}\n")
     for i in range(min(5, len(best_layouts))):
         # Optimize the best layouts found with simulated annealing
-        threads.append(concurrent.futures.ThreadPoolExecutor().submit(simulated_annealing, best_layouts[i][0], T=1, alpha=0.8, time_limit=100, return_results=bests_intensification[i], qr=deepcopy(qr), qc=deepcopy(qc), backend=deepcopy(backend)))
+        threads.append(threading.Thread(target=simulated_annealing, args=(best_layouts[i][0], 1, 0.9, 300, bests_intensification[i], qr, qc, backend, 1, instance_num)))
+        threads[-1].start()
     for thread in threads:
-        thread.result()
+        thread.join()
 
     # Merge the results of the threads
     i_results = []
