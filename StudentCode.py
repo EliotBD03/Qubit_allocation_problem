@@ -79,7 +79,7 @@ def instance_selection(instance_num):
 ##     Pour choisir une instance: 
 ##     Modifier instance_num ET RIEN D'AUTRE    
 ##-------------------------------------------------------
-instance_num=1     #### Entre 1 et 9 inclue
+instance_num=3     #### Entre 1 et 9 inclue
 
 backend_name,circuit_type,num_qubit=instance_selection(instance_num)
 backend,qc,qr=instance_characteristic(backend_name,circuit_type,num_qubit)
@@ -99,32 +99,26 @@ m=backend.num_qubits
 import random
 
 layout = list(range(n))
-fitness(layout)
 
-print(f"n={n}, m={m} et fitness_test={fitness(layout)}. Instance {instance_num} ok !")
 
 random.shuffle(layout)
-fitness(layout)
-print(f"n={n}, m={m} et fitness_test={fitness(layout)}. Instance {instance_num} ok !")
 
-
-def hill_climbing(layout, neigborhood_generation_method, nb_it=10, size_tabu_list = 10):
+def hill_climbing(layout, neigborhood_generation_method, nb_it=10, size_tabu_list=10):
     best_fitness = fitness(layout)
     best_layout = layout
     tabu_list = [layout] + [None] * (size_tabu_list - 1)
     for i in range(nb_it):
-        
         best_neighbor = find_best_neighbor(gen_neighborhood_for_tabu_search(best_layout, tabu_list, neigborhood_generation_method))
         fitness_best_neighbor = fitness(best_neighbor)
         
         if best_fitness == fitness_best_neighbor:
             return best_layout #local minimal reached
-        elif best_fitness > fitness_best_neighbor:
-            best_layout = best_neighbor
-            best_fitness = fitness_best_neighbor
+        best_layout = best_neighbor
+        best_fitness = fitness_best_neighbor
         append(tabu_list, best_neighbor)
-
     return best_layout
+
+
 
 def append(tabu_list, element):
     if tabu_list[-1] != None:
@@ -182,6 +176,28 @@ def gen_neighborhood_moving(layout):
 
     return neighborhood
 
+
+def destroy_my_pc(layout):
+    tabu_size_list = 5
+    nb_it = 2
+    curr_methods = [gen_neighborhood_moving, gen_neighborhood_transposition, gen_neighborhood_inversion]
+    curr_sols = [None] * 3
+    best_solution = layout
+    for i in range(1,tabu_size_list):
+        for j in range(1,nb_it):
+            for k, curr_method in enumerate(curr_methods):
+                curr = hill_climbing(layout, curr_method, j, i)
+                print(k)
+                curr_sols[k] = [curr, fitness(curr)]
+            best_curr_sol = 0
+            for l in range(1,len(curr_sols)):
+                if fitness(curr_sols[best_curr_sol]) > fitness(curr_sols[l]):
+                    best_curr_sol = l 
+            if fitness(best_solution) > fitness(curr_sols[best_curr_sol]):
+                best_solution = curr_sols[best_curr_sol]
+                print(f"ne solution found ! {best_solution} {fitness(best_solution)} with it = {j} and tabu_size_list = {i}")
+
+
 """
 def hill_climbing_thread(layout, neigborhood_generation_method, buff, nb_it=10, size_tabu_list = 10):
     best_fitness = fitness(layout)
@@ -215,6 +231,10 @@ def test(layout):
                     best_solution = current_solutions[j]
     return best_solution   
 """
+
+#destroy_my_pc(layout)
+
+
 best_layout = hill_climbing(layout, gen_neighborhood_moving)
 print(f"{best_layout}")
 print(f"n={n}, m={m} et fitness_test={fitness(best_layout)}. Instance {instance_num} ok !")
@@ -224,6 +244,9 @@ print(f"n={n}, m={m} et fitness_test={fitness(best_layout)}. Instance {instance_
 best_layout = hill_climbing(layout, gen_neighborhood_transposition)
 print(f"{best_layout}")
 print(f"n={n}, m={m} et fitness_test={fitness(best_layout)}. Instance {instance_num} ok !")
+
+
+
 #best_layout = test(layout)
 
 
