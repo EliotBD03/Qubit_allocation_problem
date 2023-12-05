@@ -63,7 +63,7 @@ def instance_selection(instance_num):
 ##     Pour choisir une instance: 
 ##     Modifier instance_num ET RIEN D'AUTRE    
 ##-------------------------------------------------------
-instance_num=3     #### Entre 1 et 9 inclue
+instance_num=8     #### Entre 1 et 9 inclue
 
 backend_name,circuit_type,num_qubit=instance_selection(instance_num)
 backend,qc,qr=instance_characteristic(backend_name,circuit_type,num_qubit)
@@ -118,32 +118,36 @@ def generate_new_layout_from_parents(layout1, layout2):
     """
     Generate a new layout by generating a new permutation of the two parents
     """
-    new_layout = list(layout1)
-    for i in range(n):
-        if np.random.rand() < 0.5:
-            new_layout[i] = layout2[i] if layout2[i] not in new_layout else layout1[i]
-    return new_layout
+    if not isinstance(layout1, np.ndarray):
+        layout1 = np.array(layout1)
+    if not isinstance(layout2, np.ndarray):
+        layout2 = np.array(layout2)
+    mask = np.random.randint(0, 2, len(layout1)).astype(bool)
+    new_layout = np.zeros_like(layout1)
+    new_layout[mask] = layout1[mask]
+    new_layout[~mask] = layout2[~mask]
+    return new_layout.tolist()
     
-layout = list(range(n))
+layout = [9, 20, 19, 15, 3, 20, 1, 0, 8, 2, 6, 10, 12, 1, 2, 16, 13, 12, 19, 5, 25, 24, 24, 7, 14, 23, 23]
 fitness(layout)
 
 print(f"n={n}, m={m} et fitness_test={fitness(layout)}. Instance {instance_num} ok !")
 
-np.random.shuffle(layout)
-fitness(layout)
-print(f"n={n}, m={m} et fitness_test={fitness(layout)}. Instance {instance_num} ok !")
-
-def hill_climbing(layout):
-    best_fitness = fitness(layout)
-    best_layout = layout
-    for i in range(10):
-        new_layout = generate_new_layout_swap_two(layout)
-        new_fitness = fitness(new_layout)
-        if new_fitness < best_fitness:
-            best_fitness = new_fitness
-            best_layout = new_layout
-    return best_layout
-
+# np.random.shuffle(layout)
+# fitness(layout)
+# print(f"n={n}, m={m} et fitness_test={fitness(layout)}. Instance {instance_num} ok !")
+#
+# def hill_climbing(layout):
+#     best_fitness = fitness(layout)
+#     best_layout = layout
+#     for i in range(10):
+#         new_layout = generate_new_layout_swap_two(layout)
+#         new_fitness = fitness(new_layout)
+#         if new_fitness < best_fitness:
+#             best_fitness = new_fitness
+#             best_layout = new_layout
+#     return best_layout
+#
 # best_layout = hill_climbing(layout)
 # print(f"{best_layout}")
 # print(f"n={n}, m={m} et fitness_test={fitness(best_layout)}. Instance {instance_num} ok !")
@@ -176,18 +180,19 @@ def simulated_annealing(layout, T=1, alpha=0.99, time_limit=10, return_results=[
     backend : list, optional
         The backend. The default is backend.
     type : int, optional
-        The type of simulated annealing to use. The default is 1 (swap two elements, intensification). Other values are 2 (generate a new random layout, diversification).
+        The type of simulated annealing to use. The default is 1 (swap two elements, intensification). Other values are 2 (generate a new random layout, diversification) and 3 (swap 2 parents from a random mask).
     """
     print(f"Starting simulated annealing... Type : {_type}. Instance {instance}")
     _b_time = time.time()
     layout1 = layout.copy()
+    layout2 = np.random.permutation(layout1)
     T_copy = deepcopy(T)
     fitness1 = fitness(layout1, qr=qr, qc=qc, backend=backend)
     best_fitness = fitness1
     best_layout = layout1
     bests_list = [(best_layout, best_fitness)]
 
-    rand_values = np.random.rand(int(time_limit / alpha)).tolist()  # Precompute random values
+    rand_values = np.random.rand(int(time_limit * 10)).tolist()  # Precompute random values
 
     print(f"Simulated annealing starting for instance {instance}...")
 
@@ -198,6 +203,8 @@ def simulated_annealing(layout, T=1, alpha=0.99, time_limit=10, return_results=[
                 new_layout1 = generate_new_layout_swap_two(layout1)
             case 2:
                 new_layout1 = generate_new_layout_random(layout1)
+            case 3:
+                new_layout1 = generate_new_layout_from_parents(layout1, layout2)
             case _:
                 new_layout1 = generate_new_layout_swap_two(layout1)
 
@@ -206,6 +213,7 @@ def simulated_annealing(layout, T=1, alpha=0.99, time_limit=10, return_results=[
         if new_fitness1 < fitness1 or rand_values.pop() < np.exp((fitness1 - new_fitness1) / T_copy):
             layout1, fitness1 = new_layout1, new_fitness1
             bests_list.append((layout1, fitness1))
+            layout2 = bests_list[np.random.randint(0, len(bests_list))][0]
             if fitness1 < best_fitness:
                 best_fitness, best_layout = fitness1, layout1
 
@@ -225,116 +233,116 @@ def simulated_annealing(layout, T=1, alpha=0.99, time_limit=10, return_results=[
 #     print(f"{best_layout}")
 #     print(f"n={n}, m={m} et fitness_test={best_fitness}. Instance {instance_num} !")
 
-import threading
-
-# Multi thread simulated annealing intensification for all the best layouts found
-def multi_thread_simulated_annealing_intensification(bests, T=1, alpha=0.99, time_limit=100, n=n, file=None, qc=qc, qr=qr, backend=backend, instance=instance_num):
-    threads = []
-    results = [[] for _ in range(5)]
-    bests_five = deepcopy(bests) 
-    bests_five.sort(key=lambda x: x[1])
-    bests_five = bests_five[:5]
-    print(f"bests_five : {bests_five}")
-    if file is not None:
-        file.write(f"\n\nStarting threads for intensification of 5 bests...\n")
-    print("Starting threads...")
-    for i in range(min(5, len(bests))):
-        threads.append(threading.Thread(target=simulated_annealing, args=(bests_five[i][0], T, alpha, time_limit, results[i], qr, qc, backend, 1, instance)))
-        threads[-1].start()
-        
-    for thread in threads:
-        thread.join()
-
-    # Print the best layout found by each thread
-    if file is not None:
-        file.write(f"\nBest layouts found after intensification :\n")
-    print("Best layouts found after intensification :")
-    end_results = []
-    for i in range(len(results)):
-        end_results += results[i]
-
-    for (best_layout, best_fitness) in end_results:
-        if file is not None:
-            file.write(f"{best_layout}\n")
-            file.write(f"n={n}, m={m} et fitness_test={best_fitness}. Instance {instance} !\n----------------\n")
-
-        print(f"{best_layout}")
-        print(f"n={n}, m={m} et fitness_test={best_fitness}. Instance {instance} !")
-
-    end_results.sort(key=lambda x: x[1])
-    if file is not None:
-        file.write(f"\nFinal best layout and cost : {min(end_results, key=lambda x: x[0][1])}")
-    print(f"Final best layout and cost : {min(end_results, key=lambda x: x[0][1])}")
-#multi_thread_simulated_annealing_intensification(bests, T=1, alpha=0.8, time_limit=100)
-
-
-def run_all_instances():
-    threads = []
-    for i in range(1, 10):
-        threads.append(threading.Thread(target=run_instance, args=(i,)))
-        threads[-1].start()
-    for thread in threads:
-        thread.join()
-
-def run_instance(instance_num):
-    print(f"Running instance {instance_num}...")
-    backend_name,circuit_type,num_qubit=instance_selection(instance_num)
-    backend,qc,qr=instance_characteristic(backend_name,circuit_type,num_qubit)
-
-    n=num_qubit
-    m=backend.num_qubits
-
-    layout = np.random.permutation(n)
-
-    file = open(f"./outputs/output_{instance_num}.txt", "w")
-
-    f1 = fitness(layout, qr=qr, qc=qc, backend=backend)
-    file.write(f"Random : f{layout}\n")
-    file.write(f"n={n}, m={m} et fitness_test={f1}. Instance {instance_num} ok !\n----------------\n")
-
-    file.write(f"Beginning diversification for instance {instance_num}...\n")
-    print(f"Beginning diversification for instance {instance_num}...")
-    bests = simulated_annealing(layout, T=100, alpha=0.9, time_limit=300, qr=deepcopy(qr), qc=deepcopy(qc), backend=deepcopy(backend), _type=1, instance=instance_num)
-    print(f"Diversification done for instance {instance_num} !")
-    file.write(f"\n\nBest layouts found after diversification :\n")
-    for (best_layout, best_fitness) in bests:
-        file.write(f"{best_layout}\n")
-        file.write(f"n={n}, m={m} et fitness_test={best_fitness}. Instance {instance_num} !\n----------------\n")
-
-    bests.sort(key=lambda x: x[1])
-
-    best_layouts = bests[:3] + bests[-2:] # Keep the 3 bests and the 2 worsts
-
-    bests_intensification = [[] for _ in range(min(5, len(best_layouts)))]
-    threads = []
-    file.write(f"\n\nStarting threads for intensification of 5 bests...\n")
-    print("Starting threads...")
-    file.write(f"\n5 bests : {best_layouts}\n")
-    for i in range(min(5, len(best_layouts))):
-        # Optimize the best layouts found with simulated annealing
-        threads.append(threading.Thread(target=simulated_annealing, args=(best_layouts[i][0], 1, 0.9, 300, bests_intensification[i], qr, qc, backend, 1, instance_num)))
-        threads[-1].start()
-    for thread in threads:
-        thread.join()
-
-    # Merge the results of the threads
-    i_results = []
-    for i in range(len(bests_intensification)):
-        i_results += bests_intensification[i]
-
-    print(f"Intensification done for instance {instance_num} !")
-    file.write(f"\n\nBest layouts found after intensification :\n")
-    for (best_layout, best_fitness) in i_results:
-        file.write(f"{best_layout}\n")
-        file.write(f"n={n}, m={m} et fitness_test={best_fitness}. Instance {instance_num} !\n----------------\n")
-
-    print(f"Final best layout and cost : {min(min(i_results, key=lambda x: x[1])[1], min(bests, key=lambda x: x[1])[1])}")
-
-    file.write(f"\nFinal best cost : {min(min(i_results, key=lambda x: x[1])[1], min(bests, key=lambda x: x[1])[1])}")
-
-    file.close()
-
-
+# import threading
+#
+# # Multi thread simulated annealing intensification for all the best layouts found
+# def multi_thread_simulated_annealing_intensification(bests, T=1, alpha=0.99, time_limit=100, n=n, file=None, qc=qc, qr=qr, backend=backend, instance=instance_num):
+#     threads = []
+#     results = [[] for _ in range(5)]
+#     bests_five = deepcopy(bests) 
+#     bests_five.sort(key=lambda x: x[1])
+#     bests_five = bests_five[:5]
+#     print(f"bests_five : {bests_five}")
+#     if file is not None:
+#         file.write(f"\n\nStarting threads for intensification of 5 bests...\n")
+#     print("Starting threads...")
+#     for i in range(min(5, len(bests))):
+#         threads.append(threading.Thread(target=simulated_annealing, args=(bests_five[i][0], T, alpha, time_limit, results[i], qr, qc, backend, 1, instance)))
+#         threads[-1].start()
+#         
+#     for thread in threads:
+#         thread.join()
+#
+#     # Print the best layout found by each thread
+#     if file is not None:
+#         file.write(f"\nBest layouts found after intensification :\n")
+#     print("Best layouts found after intensification :")
+#     end_results = []
+#     for i in range(len(results)):
+#         end_results += results[i]
+#
+#     for (best_layout, best_fitness) in end_results:
+#         if file is not None:
+#             file.write(f"{best_layout}\n")
+#             file.write(f"n={n}, m={m} et fitness_test={best_fitness}. Instance {instance} !\n----------------\n")
+#
+#         print(f"{best_layout}")
+#         print(f"n={n}, m={m} et fitness_test={best_fitness}. Instance {instance} !")
+#
+#     end_results.sort(key=lambda x: x[1])
+#     if file is not None:
+#         file.write(f"\nFinal best layout and cost : {min(end_results, key=lambda x: x[0][1])}")
+#     print(f"Final best layout and cost : {min(end_results, key=lambda x: x[0][1])}")
+# #multi_thread_simulated_annealing_intensification(bests, T=1, alpha=0.8, time_limit=100)
+#
+#
+# def run_all_instances():
+#     threads = []
+#     for i in range(1, 10):
+#         threads.append(threading.Thread(target=run_instance, args=(i,)))
+#         threads[-1].start()
+#     for thread in threads:
+#         thread.join()
+#
+# def run_instance(instance_num):
+#     print(f"Running instance {instance_num}...")
+#     backend_name,circuit_type,num_qubit=instance_selection(instance_num)
+#     backend,qc,qr=instance_characteristic(backend_name,circuit_type,num_qubit)
+#
+#     n=num_qubit
+#     m=backend.num_qubits
+#
+#     layout = np.random.permutation(n)
+#
+#     file = open(f"./outputs/output_{instance_num}.txt", "w")
+#
+#     f1 = fitness(layout, qr=qr, qc=qc, backend=backend)
+#     file.write(f"Random : f{layout}\n")
+#     file.write(f"n={n}, m={m} et fitness_test={f1}. Instance {instance_num} ok !\n----------------\n")
+#
+#     file.write(f"Beginning diversification for instance {instance_num}...\n")
+#     print(f"Beginning diversification for instance {instance_num}...")
+#     bests = simulated_annealing(layout, T=100, alpha=0.9, time_limit=300, qr=deepcopy(qr), qc=deepcopy(qc), backend=deepcopy(backend), _type=3, instance=instance_num)
+#     print(f"Diversification done for instance {instance_num} !")
+#     file.write(f"\n\nBest layouts found after diversification :\n")
+#     for (best_layout, best_fitness) in bests:
+#         file.write(f"{best_layout}\n")
+#         file.write(f"n={n}, m={m} et fitness_test={best_fitness}. Instance {instance_num} !\n----------------\n")
+#
+#     bests.sort(key=lambda x: x[1])
+#
+#     best_layouts = bests[:3] + bests[-2:] # Keep the 3 bests and the 2 worsts
+#
+#     bests_intensification = [[] for _ in range(min(5, len(best_layouts)))]
+#     threads = []
+#     file.write(f"\n\nStarting threads for intensification of 5 bests...\n")
+#     print("Starting threads...")
+#     file.write(f"\n5 bests : {best_layouts}\n")
+#     for i in range(min(5, len(best_layouts))):
+#         # Optimize the best layouts found with simulated annealing
+#         threads.append(threading.Thread(target=simulated_annealing, args=(best_layouts[i][0], 1, 0.9, 300, bests_intensification[i], qr, qc, backend, 1, instance_num)))
+#         threads[-1].start()
+#     for thread in threads:
+#         thread.join()
+#
+#     # Merge the results of the threads
+#     i_results = []
+#     for i in range(len(bests_intensification)):
+#         i_results += bests_intensification[i]
+#
+#     print(f"Intensification done for instance {instance_num} !")
+#     file.write(f"\n\nBest layouts found after intensification :\n")
+#     for (best_layout, best_fitness) in i_results:
+#         file.write(f"{best_layout}\n")
+#         file.write(f"n={n}, m={m} et fitness_test={best_fitness}. Instance {instance_num} !\n----------------\n")
+#
+#     print(f"Final best layout and cost : {min(min(i_results, key=lambda x: x[1])[1], min(bests, key=lambda x: x[1])[1])}")
+#
+#     file.write(f"\nFinal best cost : {min(min(i_results, key=lambda x: x[1])[1], min(bests, key=lambda x: x[1])[1])}")
+#
+#     file.close()
+#
+#
 
     # for instance_num in range(1, 10):
     #     backend_name,circuit_type,num_qubit=instance_selection(instance_num)
@@ -364,7 +372,7 @@ def run_instance(instance_num):
     #
     #     file.close()
 
-run_all_instances()
+#run_all_instances()
 
 
 ###### A faire : un algo d'optimisation qui minimise la fonction fitness,
