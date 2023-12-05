@@ -98,7 +98,7 @@ m=backend.num_qubits
 # On peut donc tester la fonction fitness sur cette solution et optimiser son resultat.
 # La metaheuristique ne doit se baser que sur le layout et la fonction fitness.
 import threading
-
+import numpy as np
 
 layout = list(range(n))
 
@@ -106,9 +106,15 @@ layout = list(range(n))
 np.random.shuffle(layout)
 
 def hill_climbing(layout, neigborhood_generation_method, size_tabu_list=10, nb_it=10):
-    best_fitness = fitness(layout)
+    """
+    The algorithm will generate a neighborhood from the best neighbor found
+    In the case we will have a better solution than the best so far, then we update it
+    The method 
+    """
+
+    best_fitness = fitness(layout) #initial solution -> the randomized layout
     best_layout = layout
-    tabu_list = [layout]
+    tabu_list = np.array([layout])
     best_neighbor = best_layout
     for _ in range(nb_it):
         neighborhood = gen_neighborhood(best_neighbor, neigborhood_generation_method)
@@ -133,8 +139,8 @@ def hill_climbing(layout, neigborhood_generation_method, size_tabu_list=10, nb_i
 
 def append(tabu_list, element, size):
     if len(tabu_list) == size:
-        tabu_list.pop(0)
-    tabu_list.append(element)
+        np.delete(tabu_list, 0)
+    np.append(tabu_list, element)
 
 def swap(l, i, j):
     temp = l[i]
@@ -143,18 +149,21 @@ def swap(l, i, j):
 
 
 def gen_neighborhood(layout, func):
-    neighborhood = list(filter(lambda x : x != None, func(layout)))
-    neighborhood.sort(key=lambda x : fitness(x))
+    neighborhood = np.array(func(layout))
+    neighborhood[neighborhood != None]
+    neighborhood_i = np.array(list(map(lambda x : fitness(x), neighborhood))).argsort()
+    neighborhood[neighborhood_i]
+    
     return neighborhood
 
 def gen_neighborhood_inversion(layout):
-    neighborhood = [None] * len(layout)
+    neighborhood = [None] * (len(layout) - 1)
 
-    for i in range(1, len(layout)):
+    for i in range(0, len(layout) - 1):
         curr_neighbor = copy.copy(layout)
-        swap(curr_neighbor, i, i - 1)
+        swap(curr_neighbor, i, i + 1)
         neighborhood[i] = curr_neighbor
-
+    
     return neighborhood
 
 def gen_neighborhood_transposition(layout):
@@ -174,41 +183,104 @@ def gen_neighborhood_moving(layout):
     for i in range(len(layout)):
         for j in range(len(layout)):
             curr_neighbor = copy.copy(layout)
-            element = curr_neighbor.pop(j)
-            curr_neighbor.insert(i, element)
+            element = curr_neighbor[j]
+            curr_neighbor = np.delete(curr_neighbor, j)
+            curr_neighbor = np.insert(curr_neighbor, i, element)
             neighborhood[i] = curr_neighbor
 
     return neighborhood
 
-def thread_task(len_list, layout):
-    best_layout = hill_climbing(layout, gen_neighborhood_inversion, len_list)
-    print(f"{best_layout}")
-    print(f"n={n}, m={m} et fitness_test={fitness(best_layout)}. Instance {instance_num} ok !")
-    print(f"length of the tabu list : {len_list}")
+
+def cross(layout_1, layout_2):
+    first_part_1 = np.random.choice(len(layout_1), len(layout_1) // 2, replace=False)
+    first_part_1.sort()
+    
+    first_part_2 = [i for i in range(len(layout_1)) if i not in first_part_1]
+    first_part_2.sort()
+    
+    child_1 = [None] * len(layout_1)
+    child_2 = copy.copy(child_1)
+    
+    for i in range(len(first_part_1)):
+        child_1[first_part_1[i]] = layout_1[first_part_1[i]]
+        child_2[first_part_2[i]] = layout_1[first_part_2[i]]
+
+
+    for i in range(len(child_1)):
+        if child_1[i] == None:
+            for j in range(len(layout_2)):
+                if layout_2[j] not in child_1:
+                    child_1[i] = layout_2[j]
+                    break   
+    
+    for i in range(len(child_2)):
+        if child_2[i] == None:
+            for j in range(len(layout_2)):
+                if layout_2[j] not in child_2:
+                    child_2[i] = layout_2[j]
+                    break 
+
+    if fitness(child_1) < fitness(child_2):
+        return child_1
+    return child_2
+
+
+def thread_task(id_thread, gen_neighborhood_method, nb_it, length_list, solutions):
+    for _ in range(10):
+        print(f"Started thread : {id_thread}")
+        solutions[id_thread] = hill_climbing(solutions[id_thread], gen_neighborhood_inversion, length_list)
+        print(f"thread : {id_thread} has found the solution {solutions[id_thread]}")
+        print(f"n={n}, m={m} et fitness_test={fitness(solutions[id_thread])}. Instance {instance_num} ok !")
+        print(f"length of the tabu list : {length_list}, nb_it : {nb_it}, neighborhood_method : {gen_neighborhood_method}")
+
+        solutions_sorted_i = np.array(list(map(lambda x : fitness(x), solutions))).argsort()
+        chosen_solution_for_cross = np.random.choice(len(solutions) - 1, 2, replace=False)
+        solutions[id_thread] = cross(solutions[solutions_sorted_i[chosen_solution_for_cross[0]]], solutions[solutions_sorted_i[chosen_solution_for_cross[1]]])
 
 def test_length(max_len_list): 
     layout = list(range(n))
-    np.random.shuffle(layout)
     threads = [None] * (max_len_list - 2) 
     for i in range(0, max_len_list - 2):
         t_layout = copy.copy(layout)
+        np.random.shuffle(layout)
         threads[i] = threading.Thread(target=thread_task, args=(i + 2, t_layout))
         threads[i].start()
     
     [threads[i].join() for i in range(0,max_len_list - 2)]
 
+def tabu_search_multi_threading(nb_threads=10):
+    threads = [None] * (nb_threads)
+
+    solutions = copy.copy(threads)
+
+    for i in range(nb_threads):
+        solutions[i] = np.arange(n)
+        np.random.shuffle(solutions[i])
+
+    methods = [gen_neighborhood_inversion, gen_neighborhood_moving, gen_neighborhood_transposition]
+    
+    for i in range(len(threads)):
+        threads[i] = threading.Thread(target=thread_task, args=(i, gen_neighborhood_inversion, 10, 5, solutions))
+        threads[i].start()
+        
+    [threads[i].join() for i in range(nb_threads)]
+
+    print(f"The best solution found => {solutions}")
+            
+
+tabu_search_multi_threading(5)
+
 """
-best_layout = hill_climbing(layout, gen_neighborhood_moving)
+best_layout = hill_climbing(layout, gen_neighborhood_inversion)
 print(f"{best_layout}")
 print(f"n={n}, m={m} et fitness_test={fitness(best_layout)}. Instance {instance_num} ok !")
-best_layout = hill_climbing(layout, gen_neighborhood_inversion)
+best_layout = hill_climbing(layout, gen_neighborhood_moving)
 print(f"{best_layout}")
 print(f"n={n}, m={m} et fitness_test={fitness(best_layout)}. Instance {instance_num} ok !")
 best_layout = hill_climbing(layout, gen_neighborhood_transposition)
 print(f"{best_layout}")
 print(f"n={n}, m={m} et fitness_test={fitness(best_layout)}. Instance {instance_num} ok !")
 """
-test_length(10)
 
 #best_layout = test(layout)
 
