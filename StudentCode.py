@@ -10,11 +10,13 @@ from qiskit import QuantumCircuit
 from qiskit.transpiler import Layout
 from qiskit.transpiler.preset_passmanagers import generate_preset_pass_manager
 from qiskit.providers.fake_provider import FakeSingaporeV2,FakeWashingtonV2,FakeCairoV2
+from copy import deepcopy
+import random
 
 ##-------------------------------------------------------
 ##     Definition de la fonction objetif à minimiser
 ##-------------------------------------------------------
-def fitness(layout) -> list:
+def fitness(layout):
     init_layout={qr[i]:layout[i] for i in range(len(layout))}
     init_layout=Layout(init_layout)
 
@@ -66,7 +68,7 @@ def instance_selection(instance_num):
         return "Singapore","ghzall",19
     elif instance_num==12:
         return "Singapore","dj",19
-    elif instance_num==1:
+    elif instance_num==13:
         return "Cairo","ghz",19
     else:
         print("Choix d'une instance inexistance, instance 1 revoyé  par défaut")
@@ -91,36 +93,6 @@ m=backend.num_qubits
 
 ###### Votre code ici
 
-# Depuis ce code, on sait que la solution est de la forme [0,1,2,...,n-1].
-# On peut donc tester la fonction fitness sur cette solution et optimiser son resultat.
-# La metaheuristique ne doit se baser que sur le layout et la fonction fitness.
-import random
-
-layout = list(range(n))
-fitness(layout)
-
-print(f"n={n}, m={m} et fitness_test={fitness(layout)}. Instance {instance_num} ok !")
-
-random.shuffle(layout)
-fitness(layout)
-print(f"n={n}, m={m} et fitness_test={fitness(layout)}. Instance {instance_num} ok !")
-
-def hill_climbing(layout):
-    best_fitness = fitness(layout)
-    best_layout = layout
-    for i in range(10):
-        new_layout = list(layout)
-        random.shuffle(new_layout)
-        new_fitness = fitness(new_layout)
-        if new_fitness < best_fitness:
-            best_fitness = new_fitness
-            best_layout = new_layout
-    return best_layout
-
-best_layout = hill_climbing(layout)
-print(f"{best_layout}")
-print(f"n={n}, m={m} et fitness_test={fitness(best_layout)}. Instance {instance_num} ok !")
-
 ###### A faire : un algo d'optimisation qui minimise la fonction fitness,
 ###### fonction qui accepte en entrée :
 ###### une liste de n parmi m (n<=m) entiers deux à deux distincts
@@ -132,22 +104,111 @@ print(f"n={n}, m={m} et fitness_test={fitness(best_layout)}. Instance {instance_
 ###### en particulier sous Linux. Essayer de la remplacer par
 ###### qasmfile=f"./Instances/{l.rstrip()}.qasm". Cela devrait résoudre le problème.
 
-###### Voici un test (à supprimer !) pour s'assurer que tout va bien
-# for i in range(1,10):
-#     instance_num=i     #### Entre 1 et 9 inclue
-#
-#     backend_name,circuit_type,num_qubit=instance_selection(instance_num)
-#     backend,qc,qr=instance_characteristic(backend_name,circuit_type,num_qubit)
-#
-#     print(f"Instance {instance_num} : {backend_name}, {circuit_type}, {num_qubit} qubits")
-#     print(f"qc : {qc.draw()}")
-#     print(f"qr : {qr}")
-#
-#     n=num_qubit
-#     m=backend.num_qubits
-#     r=fitness(list(range(n)))
-#     print(f"n={n}, m={m} et fitness_test={r}. Instance {instance_num} ok !")
-#
-#
-#
+def firstPopu(size,n):
+    layout=list(range(n))
+    popu=[]
+    for i in range(size):
+        l=deepcopy(layout)
+        random.shuffle(l)
+        popu.append(l)
+    
+    allCost(popu)
+    return popu
+
+def mutageneParty(popu,lim):
+    if lim >= 1:
+        raise ValueError("You cannot do this with lim="+lim+". It must be less than 1")
+    for s in popu:
+        if random.random()<=lim:
+            p=random.randint(0,len(s)-1)
+            q=random.randint(0,len(s)-1)
+            if p!=q:
+                if p<q: 
+                    tmp=s[p:q]
+                    tmp.reverse()
+                    s[p:q]=tmp
+                else:
+                    tmp=s[q:p]
+                    tmp.reverse()
+                    s[q:p]=tmp
+
+
+def before(l):
+    return random.randint(0,len(l)//2)
+
+def after(l):
+    return random.randint(len(l)//2+1,len(l)-1)
+
+def nsfw(parents,lim):
+    if lim >= 1:
+        raise ValueError("You cannot do this with lim="+lim+". It must be less than 1")
+    if random.random()<=lim:
+        k1=deepcopy(parents[0])
+        k2=deepcopy(parents[1])
+
+        x=before(k1)
+        y=after(k1)
+
+        part1=k1[x:y]
+        part2=k2[x:y]
+
+        k1[x:y]=part2
+        k2[x:y]=part1
+        
+        return k1,k2
+
+def whoIsHorny(popu):
+    l=len(popu)//5
+    view=[]
+    while l!=0:
+        i=random.randint(1,len(popu)-1)
+        if i in view or i+1 in view:
+            l-=1
+        else:
+            view.append(popu[i-1])
+            view.append(popu[i])
+            l-=1
+    
+    return view
+
+def giveNewPopu(popu,a,b):
+
+    print("-"*20+"On fait des gosses ici"+"-"*20)
+
+    choosed=whoIsHorny(popu)
+    i=0
+    while i<len(choosed):
+        p=[choosed[i],choosed[i+1]]
+        k=nsfw(p,a)
+        if k is None:
+            break
+        choosed[i]=k[0]
+        choosed[i+1]=k[1]
+        i+=2
+    
+    mutageneParty(choosed,b)
+    return choosed
+
+def allCost(popu):
+    currMin=0
+    cost=2002
+    i=0
+    b=0
+    for s in popu:
+        i+=1
+        score=fitness(s)
+        print(str(s)+"-->"+str(score)+"\n")
+        if score<cost:
+            cost=score
+            currMin=s
+            b=i
+
+    print("Le meilleur c'est le "+str(b)+"e avec un coût de "+str(cost)+".")
+    
+
+allCost(giveNewPopu(firstPopu(20,n),0.85,0.32))
+
+
+def lawOfLife(first,a,b):
+    allCost(giveNewPopu(first,a,b))
 
