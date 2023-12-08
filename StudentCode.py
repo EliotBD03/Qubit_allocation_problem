@@ -66,24 +66,11 @@ def instance_selection(instance_num):
         return "Singapore","ghzall",19
     elif instance_num==12:
         return "Singapore","dj",19
-    elif instance_num==1:
+    elif instance_num==13:
         return "Cairo","ghz",19
     else:
         print("Choix d'une instance inexistance, instance 1 revoyé  par défaut")
         return "Cairo","ghzall",20
-
-
-##-------------------------------------------------------
-##     Pour choisir une instance: 
-##     Modifier instance_num ET RIEN D'AUTRE    
-##-------------------------------------------------------
-instance_num= 6     #### Entre 1 et 9 inclue
-
-backend_name,circuit_type,num_qubit=instance_selection(instance_num)
-backend,qc,qr=instance_characteristic(backend_name,circuit_type,num_qubit)
-
-n=num_qubit
-m=backend.num_qubits
 
 ##-------------------------------------------------------
 ##     A vous de jouer !  
@@ -125,7 +112,7 @@ def VNS_AxelVersion(n:int):
     currNeighb = 0
     changed = False
     
-    currBestList = np.random.permutation(n)
+    currBestList = np.random.permutation(n+1)
     currMin = fitness(currBestList)
     # Initial Solution
     while currNeighFinished < nbOfNeigh:
@@ -160,20 +147,23 @@ def VNS_AxelVersion(n:int):
 
     return (currBestList, currMin)
 
-def VNS_Real(size: int, nList: list):
+def VNS_Real(size: int, nList: list, maxIt = 10):
     i = 0
+    currIt = 1
     nSize = len(nList)
 
-    s = random.sample(range(0,size), size)
-    best = (s,fitness(s))
+    best = GRASP(size, maxIt/2)
+
+    #best = (s,fitness(s))
     shakedSol = []
     bestShakedSol = []
-    while i < nSize:
-        print("New iteration !\n i = " + str(i))
+    while i < nSize and currIt <= maxIt:
+        print("New iteration !\n    " + str(currIt))
         shakedSol = ShakeSol(best[0], nList[i], size)
         bestShakedSol = Local_Search(nList[i], shakedSol, size)
-        if (bestShakedSol[1] < best[1]):
-            print("NEW BEST !!!\n From :" + str(best[1]) + " to " + str(bestShakedSol[1]))    
+        if (bestShakedSol[1] < best[1] or (acceptWithError(best[1], bestShakedSol[1], currIt))):
+        
+            print("NEW Solution !!!\n From :" + str(best[1]) + " to " + str(bestShakedSol[1]))    
             print("Previous: " + str(best[0]))
             print("New:      " + str(bestShakedSol[0]))
             print("______________________________________________")
@@ -181,11 +171,24 @@ def VNS_Real(size: int, nList: list):
             i = 0
         else:
             i += 1
+        currIt += 1
 
     return best
 
+def acceptWithError(currValue: int, solValue: int, t: int):
+    if(currValue == solValue):
+        return False
+    prob = np.power(np.e,(currValue-solValue)/t)
+
+    print(prob)
+    if(random.random() < prob):
+        print("Accepted With Error")
+        return True
+    return False
+
+
 def ShakeSol(s, neighborhood, size):
-    neighbors = [n.copy() for n in neighborhood(s, size)]
+    neighbors = [n[:] for n in neighborhood(s, size)]
     return neighbors[random.randint(0,len(neighbors)-1)]
 
 def nextInversionNeighbor(l, n):
@@ -233,7 +236,7 @@ def GRASP(size, maxIteration) -> tuple:
         sol = Greedy_Randomized_Construction(size)
 
         # Local Search
-        currSolution = Local_Search(nextPermutationNeighbor,sol,size)
+        currSolution = Local_Search(nextInversionNeighbor,sol,size)
 
         # Update Solution
         if currSolution[1] < BestSolution[1]:
@@ -264,7 +267,6 @@ def Local_Search(neighborhood, sol: list,size: int):
     return (currBestList, currMin)
 
 
-print(VNS_Real(n, [nextInversionNeighbor, nextPermutationNeighbor, nextMovementNeighbor]))
 #for i in nextMovementNeighbor(list(range(4)), 4):
 #    print(i)
 
@@ -298,4 +300,29 @@ print(VNS_Real(n, [nextInversionNeighbor, nextPermutationNeighbor, nextMovementN
 #
 #
 #
+
+
+
+##-------------------------------------------------------
+##     Pour choisir une instance: 
+##     Modifier instance_num ET RIEN D'AUTRE    
+##-------------------------------------------------------
+res = []
+for i in range(1,10):
+    print("_-_-_-_-_-_-_-_-INSTANCE: " + str(i) +"-_-_-_-_-_-_-_-_-_-_-_-_-_-")
+    instance_num= i+1     #### Entre 1 et 9 inclue
+    backend_name,circuit_type,num_qubit=instance_selection(instance_num)
+    backend,qc,qr=instance_characteristic(backend_name,circuit_type,num_qubit)
+
+    n=num_qubit
+    m=backend.num_qubits
+    res.append(copy(VNS_Real(n, [nextInversionNeighbor, nextPermutationNeighbor])))
+
+
+for i in range(len(res)):
+    print("Solution for instance : " + str(i + 1))
+    print(res[i][0])
+    print("With a cost of:")
+    print(res[i][1])
+    print("____________________________")
 
