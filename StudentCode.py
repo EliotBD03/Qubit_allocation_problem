@@ -17,7 +17,7 @@ from qiskit.providers.fake_provider import FakeSingaporeV2,FakeWashingtonV2,Fake
 ##-------------------------------------------------------
 ##     Definition de la fonction objetif à minimiser
 ##-------------------------------------------------------
-def fitness(layout) -> list:
+def fitness(layout) -> int:
     init_layout={qr[i]:layout[i] for i in range(len(layout))}
     init_layout=Layout(init_layout)
 
@@ -174,7 +174,7 @@ def gen_neighborhood_transposition(layout):
             curr_neighbor = copy.copy(layout)
             swap(curr_neighbor, i, j)
             neighborhood[i] = curr_neighbor
-
+    print(f"permutation => {neighborhood}")
     return neighborhood
 
 def gen_neighborhood_moving(layout):
@@ -225,17 +225,23 @@ def cross(layout_1, layout_2):
     return child_2
 
 
-def thread_task(id_thread, gen_neighborhood_method, nb_it, length_list, solutions):
-    for _ in range(10):
-        print(f"Started thread : {id_thread}")
-        solutions[id_thread] = hill_climbing(solutions[id_thread], gen_neighborhood_inversion, length_list)
+def thread_task(id_thread, gen_neighborhood_method, nb_it, length_list, solutions, best_solution_so_far):
+    for i in range(nb_it, -1, -1):
+        print(f"Started thread : {id_thread} with the current solution {solutions[id_thread]}")
+        solutions[id_thread]= hill_climbing(solutions[id_thread], gen_neighborhood_inversion, i % length_list)
+        if(fitness(best_solution_so_far) > fitness(solutions[id_thread])):
+            best_solution_so_far = solutions[id_thread]
+        print("--------------------------------------------------------------------")
         print(f"thread : {id_thread} has found the solution {solutions[id_thread]}")
         print(f"n={n}, m={m} et fitness_test={fitness(solutions[id_thread])}. Instance {instance_num} ok !")
         print(f"length of the tabu list : {length_list}, nb_it : {nb_it}, neighborhood_method : {gen_neighborhood_method}")
+        print("--------------------------------------------------------------------")
 
         solutions_sorted_i = np.array(list(map(lambda x : fitness(x), solutions))).argsort()
         chosen_solution_for_cross = np.random.choice(len(solutions) - 1, 2, replace=False)
         solutions[id_thread] = cross(solutions[solutions_sorted_i[chosen_solution_for_cross[0]]], solutions[solutions_sorted_i[chosen_solution_for_cross[1]]])
+        #solutions[id_thread] = cross(solutions[solutions_sorted_i[0]], solutions[solutions_sorted_i[1]])
+
 
 def test_length(max_len_list): 
     layout = list(range(n))
@@ -254,21 +260,20 @@ def tabu_search_multi_threading(nb_threads=10):
     solutions = copy.copy(threads)
 
     for i in range(nb_threads):
-        solutions[i] = np.arange(n)
-        np.random.shuffle(solutions[i])
+        solutions[i] = np.random.rand(m).argsort().tolist()[0:n]
 
     methods = [gen_neighborhood_inversion, gen_neighborhood_moving, gen_neighborhood_transposition]
     
     for i in range(len(threads)):
-        threads[i] = threading.Thread(target=thread_task, args=(i, gen_neighborhood_inversion, 10, 5, solutions))
+        threads[i] = threading.Thread(target=thread_task, args=(i, gen_neighborhood_transposition, 10, 10, solutions, layout))
         threads[i].start()
         
     [threads[i].join() for i in range(nb_threads)]
 
-    print(f"The best solution found => {solutions}")
+    print(f"The best solution found => {layout} for a total cost of {fitness(layout)}")
             
 
-tabu_search_multi_threading(5)
+#tabu_search_multi_threading(10)
 
 """
 best_layout = hill_climbing(layout, gen_neighborhood_inversion)
