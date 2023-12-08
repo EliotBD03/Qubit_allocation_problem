@@ -52,7 +52,7 @@ def instance_selection(instance_num):
         return "Singapore","ghzall",19
     elif instance_num==12:
         return "Singapore","dj",19
-    elif instance_num==1:
+    elif instance_num==13:
         return "Cairo","ghz",19
     else:
         print("Choix d'une instance inexistance, instance 1 revoyé  par défaut")
@@ -107,28 +107,15 @@ def generate_new_layout_swap_two(layout):
     new_layout[i], new_layout[j] = new_layout[j], new_layout[i]
     return new_layout
 
-def generate_new_layout_random(layout):
+def generate_new_layout_random(layout, m):
     """
     Generate a new layout by generating a new random layout
     """
-    new_layout = np.random.permutation(layout)
-    return new_layout.tolist()
+    new_layout = np.random.choice(m, len(layout), replace=False)
+    return new_layout
 
-def generate_new_layout_from_parents(layout1, layout2):
-    """
-    Generate a new layout by generating a new permutation of the two parents
-    """
-    if not isinstance(layout1, np.ndarray):
-        layout1 = np.array(layout1)
-    if not isinstance(layout2, np.ndarray):
-        layout2 = np.array(layout2)
-    mask = np.random.randint(0, 2, len(layout1)).astype(bool)
-    new_layout = np.zeros_like(layout1)
-    new_layout[mask] = layout1[mask]
-    new_layout[~mask] = layout2[~mask]
-    return new_layout.tolist()
     
-layout = np.random.permutation(n)
+layout = np.random.choice(m, n, replace=False)
 fitness(layout)
 
 print(f"n={n}, m={m} et fitness_test={fitness(layout)}. Instance {instance_num} ok !")
@@ -157,7 +144,7 @@ Current best results :
 [19, 9, 16, 10, 4, 1, 5, 14, 12, 7, 15, 3, 11, 2, 0, 18, 13, 8, 17, 6]
 n=20, m=27 et fitness_test=63. Instance 1 ok !
 """
-def simulated_annealing(layout, T=1, alpha=0.99, time_limit=10, return_results=[], qr=qr, qc=qc, backend=backend, _type=1, instance=1):
+def simulated_annealing(layout, T=1, alpha=0.99, time_limit=10, return_results=[], qr=qr, qc=qc, backend=backend, _type=1, instance=1, m=m):
     """
     Simulated annealing algorithm for the layout problem
 
@@ -180,12 +167,11 @@ def simulated_annealing(layout, T=1, alpha=0.99, time_limit=10, return_results=[
     backend : list, optional
         The backend. The default is backend.
     type : int, optional
-        The type of simulated annealing to use. The default is 1 (swap two elements, intensification). Other values are 2 (generate a new random layout, diversification) and 3 (swap 2 parents from a random mask).
+        The type of simulated annealing to use. The default is 1 (swap two elements, intensification). Other values are 2 (generate a new random layout, diversification).
     """
     print(f"Starting simulated annealing... Type : {_type}. Instance {instance}")
     _b_time = time.time()
     layout1 = layout.copy()
-    layout2 = np.random.permutation(layout1)
     T_copy = deepcopy(T)
     fitness1 = fitness(layout1, qr=qr, qc=qc, backend=backend)
     best_fitness = fitness1
@@ -202,9 +188,7 @@ def simulated_annealing(layout, T=1, alpha=0.99, time_limit=10, return_results=[
             case 1:
                 new_layout1 = generate_new_layout_swap_two(layout1)
             case 2:
-                new_layout1 = generate_new_layout_random(layout1)
-            case 3:
-                new_layout1 = generate_new_layout_from_parents(layout1, layout2)
+                new_layout1 = generate_new_layout_random(layout1, m)
             case _:
                 new_layout1 = generate_new_layout_swap_two(layout1)
 
@@ -213,7 +197,6 @@ def simulated_annealing(layout, T=1, alpha=0.99, time_limit=10, return_results=[
         if new_fitness1 < fitness1 or rand_values.pop() < np.exp((fitness1 - new_fitness1) / T_copy):
             layout1, fitness1 = new_layout1, new_fitness1
             bests_list.append((layout1, fitness1))
-            layout2 = bests_list[np.random.randint(0, len(bests_list))][0]
             if fitness1 < best_fitness:
                 best_fitness, best_layout = fitness1, layout1
 
@@ -225,6 +208,126 @@ def simulated_annealing(layout, T=1, alpha=0.99, time_limit=10, return_results=[
     print(f"Simulated annealing done for instance {instance} !")
 
     return bests_list
+
+
+def simulated_annealing_iteration(layout, iterations, T, alpha, qr, qc, backend):
+    """
+    Simulated annealing algorithm for the layout problem with a fixed number of iterations
+    """
+    layout1 = layout.copy()
+    fitness1 = fitness(layout1, qr, qc, backend)
+    best_fitness = fitness1
+    best_layout = layout1
+    rand_values = np.random.rand(iterations).tolist()  # Precompute random values
+    for _ in range(iterations):
+        new_layout1 = generate_new_layout_swap_two(layout1)
+        new_fitness1 = fitness(new_layout1, qr, qc, backend)
+        if new_fitness1 < fitness1 or rand_values.pop() < np.exp((fitness1 - new_fitness1) / T):
+            with open(f"./outputs2/output_{instance_num}.txt", "a") as file:
+                file.write(f"{new_layout1}\n")
+                file.write(f"n={n}, m={m} et fitness_test={new_fitness1}. Instance {instance_num} !\n----------------\n")
+            layout1, fitness1 = new_layout1, new_fitness1           
+            if fitness1 < best_fitness:
+                best_fitness, best_layout = fitness1, layout1
+        T *= alpha
+    return (best_layout, best_fitness)
+
+
+target_fitnesses = [46, 45, 66, 67, 55, 89, 22, 29, 42]
+def multi_thread_simulated_annealing(layout, ex, reduction, thread_number=10, instance=1):
+    """
+    Multi thread simulated annealing algorithm for the layout problem.
+    The algorithm is based on the Cluster Algorithm for Simulated Annealing (CA) which can be found in the following paper :
+    https://www.sciencedirect.com/science/article/pii/S0743731596901215
+
+    Parameters
+    ----------
+    layout : list
+        The layout to optimize.
+    ex : float
+        The exchange parameter for partial results (temperature).
+    reduction : float
+        The reduction parameter for the temperature.
+    thread_number : int, optional
+        The number of threads (workers) to use. The default is 10.
+    instance : int, optional
+        The instance number. The default is 1.
+    """
+    backend_name,circuit_type,num_qubit=instance_selection(instance_num)
+    backend,qc,qr=instance_characteristic(backend_name,circuit_type,num_qubit)
+
+    n=num_qubit
+    m=backend.num_qubits
+
+    # Get the 'thread_number' initial layouts for the threads
+    layouts = [layout.copy() for _ in range(thread_number)]
+    for i in range(thread_number):
+        np.random.shuffle(layouts[i])
+
+    # Get the target fitness for the threads
+    target_fitness = target_fitnesses[instance - 1]
+
+    # Get the initial fitnesses for the threads
+    fitnesses = [fitness(layouts[i], deepcopy(qr), deepcopy(qc), deepcopy(backend)) for i in range(thread_number)]
+
+    # Initialize the workers
+    workers = [threading.Thread(target=_multi_thread_simulated_annealing, args=(layouts[i], ex, reduction, fitnesses[i], target_fitness, deepcopy(qr), deepcopy(qc), deepcopy(backend))) for i in range(thread_number)]
+
+    print(f"Starting simulated annealing for instance {instance}...")
+    
+    # Start the workers
+    for worker in workers:
+        worker.start()
+
+    # Wait for the workers to finish
+    for worker in workers:
+        worker.join()
+
+    # Get the best layout and fitness
+    best_layout, best_fitness = min(zip(layouts, fitnesses), key=lambda x: x[1])
+
+
+    print(f"Best layout found : {best_layout}")
+    print(f"n={n}, m={m} et fitness_test={best_fitness}. Instance {instance} !")
+
+    with open(f"./outputs2/output_{instance_num}.txt", "a") as file:
+        file.write(f"\n\nBest layout found :\n")
+        file.write(f"{best_layout}\n")
+        file.write(f"n={n}, m={m} et fitness_test={best_fitness}. Instance {instance_num} !\n----------------\n")
+
+
+def _multi_thread_simulated_annealing(layout, ex, reduction, current_fitness, target_fitness, qr, qc, backend):
+    """
+    Simulated annealing algorithm for the layout problem.
+    The algorithm is based on the Cluster Algorithm for Simulated Annealing (CA) which can be found in the following paper :
+    https://www.sciencedirect.com/science/article/pii/S0743731596901215
+
+    Parameters
+    ----------
+    layout : list
+        The layout to optimize.
+    ex : float
+        The exchange parameter for partial results (temperature).
+    reduction : float
+        The reduction parameter for the temperature.
+    current_fitness : int
+        The current fitness of the layout.
+    target_fitness : int
+        The target fitness of the layout.
+    """
+    while current_fitness > target_fitness and ex > 0.01:
+        # Generate a new layout
+        results = simulated_annealing_iteration(layout, 10, ex, 0.99, qr, qc, backend)
+
+        # Get the new layout and fitness
+        new_layout, new_fitness = results
+
+        # If the new layout is better, update the current layout and fitness
+        if new_fitness < current_fitness:
+            layout, current_fitness = new_layout, new_fitness
+
+        ex -= reduction
+
 
 # layout1 = np.random.permutation(n)
 # bests = simulated_annealing(layout1, T=10, alpha=0.99, time_limit=100)
@@ -247,7 +350,7 @@ def multi_thread_simulated_annealing_intensification(bests, T=1, alpha=0.99, tim
         file.write(f"\n\nStarting threads for intensification of 5 bests...\n")
     print("Starting threads...")
     for i in range(min(5, len(bests))):
-        threads.append(threading.Thread(target=simulated_annealing, args=(bests_five[i][0], T, alpha, time_limit, results[i], qr, qc, backend, 1, instance)))
+        threads.append(threading.Thread(target=simulated_annealing, args=(bests_five[i][0], T, alpha, time_limit, results[i], qr, qc, backend, 1, instance, m)))
         threads[-1].start()
         
     for thread in threads:
@@ -292,17 +395,27 @@ def run_instance(instance_num):
     n=num_qubit
     m=backend.num_qubits
 
-    layout = np.random.permutation(n)
+    layout = np.random.choice(m, n, replace=False)
 
     file = open(f"./outputs/output_{instance_num}.txt", "w")
-
     f1 = fitness(layout, qr=qr, qc=qc, backend=backend)
     file.write(f"Random : f{layout}\n")
     file.write(f"n={n}, m={m} et fitness_test={f1}. Instance {instance_num} ok !\n----------------\n")
 
     file.write(f"Beginning diversification for instance {instance_num}...\n")
     print(f"Beginning diversification for instance {instance_num}...")
-    bests = simulated_annealing(layout, T=100, alpha=0.9, time_limit=300, qr=deepcopy(qr), qc=deepcopy(qc), backend=deepcopy(backend), _type=3, instance=instance_num)
+    print("Starting threads...")
+    bests = [[] for _ in range(2)]
+    threads = []
+    for i in range(2):
+        threads.append(threading.Thread(target=simulated_annealing, args=(layout, 100, 0.9, 1000, bests[i], qr, qc, backend, 2, instance_num, m)))
+        threads[-1].start()
+    for thread in threads:
+        thread.join()
+    
+    # Merge the results of the threads
+    bests = bests[0] + bests[1]
+
     print(f"Diversification done for instance {instance_num} !")
     file.write(f"\n\nBest layouts found after diversification :\n")
     for (best_layout, best_fitness) in bests:
@@ -320,7 +433,7 @@ def run_instance(instance_num):
     file.write(f"\n5 bests : {best_layouts}\n")
     for i in range(min(5, len(best_layouts))):
         # Optimize the best layouts found with simulated annealing
-        threads.append(threading.Thread(target=simulated_annealing, args=(best_layouts[i][0], 1, 0.9, 300, bests_intensification[i], qr, qc, backend, 1, instance_num)))
+        threads.append(threading.Thread(target=simulated_annealing, args=(best_layouts[i][0], 1, 0.9, 1000, bests_intensification[i], qr, qc, backend, 1, instance_num, m)))
         threads[-1].start()
     for thread in threads:
         thread.join()
@@ -372,7 +485,16 @@ def run_instance(instance_num):
     #
     #     file.close()
 
-run_all_instances()
+#run_all_instances()
+
+for instance_num in range(1, 10):
+    backend_name,circuit_type,num_qubit=instance_selection(instance_num)
+    backend,qc,qr=instance_characteristic(backend_name,circuit_type,num_qubit)
+
+    n=num_qubit
+    layout = np.random.permutation(n)
+
+    multi_thread_simulated_annealing(layout, 100, 0.9, 8, instance=instance_num)
 
 
 ###### A faire : un algo d'optimisation qui minimise la fonction fitness,
