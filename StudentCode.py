@@ -6,10 +6,13 @@ Created on Tue Nov 14 11:08:40 2023
 """
 
 import numpy as np
+import time
 from qiskit import QuantumCircuit
 from qiskit.transpiler import Layout
 from qiskit.transpiler.preset_passmanagers import generate_preset_pass_manager
 from qiskit.providers.fake_provider import FakeSingaporeV2,FakeWashingtonV2,FakeCairoV2
+
+
 
 ##-------------------------------------------------------
 ##     Definition de la fonction objetif à minimiser
@@ -84,28 +87,33 @@ def instance_selection(instance_num):
 import random
 from copy import copy
 
-def VNS_FunnyVersion(n:int, neighborhoods: list):
+def VNS_FunnyVersion(n:int, neighborhoods: list, maxTime= float('inf')):
     x = np.random.permutation(n)
     fx = fitness(x)
     currOpt = (x[:],fx)
     k = 0
-    while (k < len(neighborhoods)):
+    startTime = time.time()
+
+    while (k < len(neighborhoods) and (time.time()-startTime) < maxTime):
+        print(time.time()-startTime)
         print("k = " + str(k))
-        s = ShakeSol(x, neighborhoods[i], n) # x'
-        # Local_Search 
-        bestShakedSol = Local_Search(neighborhoods[i],s, n)  # x''
+        s = ShakeSol(x, neighborhoods[k], n) # x'
+        # Local_Search
+        print("Start Local_Search") 
+        bestShakedSol = Local_Search(neighborhoods[k],s, n)  # x''
         #print(bestShakedSol)
-        if bestShakedSol[1] < currOpt[1]:
-            currOpt = bestShakedSol
+        print("Finished Local Search")
+        if bestShakedSol[1] < currOpt[1]: # f(x'') < f_opt
+            currOpt = (bestShakedSol[0],fx) # f_opt = f(x) et x_opt = x''
         
         print(distance(bestShakedSol[0], x))
-        if(bestShakedSol[1] != fx and bestShakedSol[1] - (1* distance(bestShakedSol[0],x))) < fx:
-            print("oh no")
+        if(bestShakedSol[1] - (10* distance(bestShakedSol[0],x))) < fx or ((bestShakedSol[0] == x).all()):
+            print("Accepted")
             x = bestShakedSol[0]
             fx = bestShakedSol[1]
             k = 0
         else:
-            print("okpookko")
+            print("Not  accepted")
             k += 1
         
         print("currOpt: " + str(currOpt))
@@ -118,6 +126,64 @@ def distance(perm1: list, perm2: list) -> int:
         if(perm1[i] != perm2[i]):
             res += 1
     return res
+
+def RVNS(n:int, neighborhoods: list, maxTime= float('inf')):
+    x = np.random.permutation(n)
+    fx = fitness(x)
+    print("Starting with x= " + str(x))
+    
+    print("fx = " + str(fx))
+    startTime = time.time()
+    while(time.time()-startTime < maxTime):
+        k = 0
+        while(k < len(neighborhoods)):
+            #print("__" * 10)
+            #print(" Shake Solution")
+            s = ShakeSol(x, neighborhoods[k])
+            s,f_s = Local_Search(neighborhoods[k], s, len(s), True)
+
+            #print(" Get Fitness for: "  + str(s))
+            #f_s = fitness(s)
+            if(f_s < fx):
+                fx = f_s
+                x = s
+                k = 0
+                print("New Solution:")
+                print("x = " + str(x))
+                print("fx = " + str(fx))
+            else:
+                k += 1
+    return (x, fx)
+
+
+def SVNS(n: int, neighborhoods: list, maxTime: (15 * 60), alpha: int):
+    x = np.random.permutation(n)
+    fx = fitness(x)
+
+    real_x,real_fx = x,fx
+    
+    startTime = time.time()
+    while(time.time() - startTime < maxTime):
+        k = 0
+        while k < len(neighborhoods) and time.time() - startTime < maxTime:
+            s = ShakeSol(x,neighborhoods[k])
+            best_s,f_bs = Local_Search(neighborhoods[k], s, len(s), True)
+            if( f_bs - (alpha * distance(x,best_s)) < fx ):
+                x = best_s
+                fx = f_bs
+                k = 0
+            else:
+                k+= 1
+
+        if(fx < real_fx):
+            real_x,real_fx = x,fx
+            print("New Best Sol:")
+            print("x = " + str(x))
+            print("fx = " + str(fx))
+        x,fx = real_x, real_fx
+            
+
+    return (real_x, real_fx)
 
 
 
@@ -162,9 +228,11 @@ def acceptWithError(currValue: int, solValue: int, t: int):
     return False
 
 
-def ShakeSol(s, neighborhood, size):
-    neighbors = [n[:] for n in neighborhood(s, size)]
-    return neighbors[random.randint(0,len(neighbors)-1)]
+def ShakeSol(s, neighborhood, size = -1):
+    if (size == -1):
+        size = len(s)
+    neighbors = [copy(n) for n in neighborhood(s, size)]
+    return neighbors[np.random.randint(0,len(neighbors)-1)]
 
 def nextInversionNeighbor(l, n):
     nextList = copy(l)
@@ -229,7 +297,7 @@ def Greedy_Randomized_Construction(size):
     return np.random.permutation(size)
 
 
-def Local_Search(neighborhood, sol: list,size: int):
+def Local_Search(neighborhood, sol: list,size: int, firstImprovement = False):
     curr = 0
     currBestList = []
     currMin = float('inf')
@@ -238,6 +306,8 @@ def Local_Search(neighborhood, sol: list,size: int):
             if curr < currMin:
                 currMin = curr
                 currBestList = copy(neighbor)
+                if(firstImprovement):
+                    break
     #print("     Local search result: " + str(currMin))
     return (currBestList, currMin)
 
@@ -283,20 +353,28 @@ def Local_Search(neighborhood, sol: list,size: int):
 ##     Modifier instance_num ET RIEN D'AUTRE    
 ##-------------------------------------------------------
 res = []
+
+nbOfMinutes = 15
+maxTime = (nbOfMinutes*60)/10
+print("Allowing " + str(maxTime) + " seconds for each instances")
 for i in range(1,10):
-    print("_-_-_-_-_-_-_-_-INSTANCE: " + str(i) +"-_-_-_-_-_-_-_-_-_-_-_-_-_-")
-    instance_num= 9    #### Entre 1 et 9 inclue
+    # Max 15 min -> 10 instance : (15* 60)/10 for each
+    print("-_" * 32)
+    print("-_"*15 + " INSTANCE: " + str(i) +"-_" * 15)
+    print("-_" * 32)
+    instance_num= i    #### Entre 1 et 9 inclue
     backend_name,circuit_type,num_qubit=instance_selection(instance_num)
     backend,qc,qr=instance_characteristic(backend_name,circuit_type,num_qubit)
 
     n=num_qubit
     m=backend.num_qubits
     #res.append(copy(VNS_Real(n, [nextInversionNeighbor, nextPermutationNeighbor])))
-    res.append(copy(VNS_FunnyVersion(n, [nextInversionNeighbor, nextPermutationNeighbor])))
-    break
-
+    #res.append(copy(RVNS(n, [nextPermutationNeighbor,nextInversionNeighbor],maxTime)))
+    res.append(copy(SVNS(n, [nextPermutationNeighbor,nextInversionNeighbor],maxTime,4)))
+    
+print("=_=" * 20)
 for i in range(len(res)):
-    print("Solution for instance : " + str(i + 1))
+    print("Solution for each instances : " + str((i)*2))
     print(res[i][0])
     print("With a cost of:")
     print(res[i][1])
