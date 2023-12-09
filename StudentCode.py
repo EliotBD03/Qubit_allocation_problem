@@ -104,6 +104,12 @@ m=backend.num_qubits
 ###### en particulier sous Linux. Essayer de la remplacer par
 ###### qasmfile=f"./Instances/{l.rstrip()}.qasm". Cela devrait résoudre le problème.
 
+'''
+Génération d'une population de façon aléatoire.
+@param size : taille de la population de base
+@param n : instance
+@return une matrice contenant les individus de la population généré
+'''
 def firstPopu(size,n):
     layout=list(range(n))
     popu=[]
@@ -112,9 +118,14 @@ def firstPopu(size,n):
         random.shuffle(l)
         popu.append(l)
     
-    allCost(popu)
     return popu
-
+    
+'''
+Mutation sur les individus.
+@param popu : la population sur qui appliquer la mutation
+@param lim : la probabilité de mutation
+@error lim : ce paramètre doit être strictement plus petit que 1
+'''
 def mutageneParty(popu,lim):
     if lim >= 1:
         raise ValueError("You cannot do this with lim="+lim+". It must be less than 1")
@@ -132,33 +143,45 @@ def mutageneParty(popu,lim):
                     tmp.reverse()
                     s[q:p]=tmp
 
-
-def before(l):
-    return random.randint(0,len(l)//2)
-
-def after(l):
-    return random.randint(len(l)//2+1,len(l)-1)
-
-def nsfw(parents,lim):
-    if lim >= 1:
-        raise ValueError("You cannot do this with lim="+lim+". It must be less than 1")
-    if random.random()<=lim:
-        k1=deepcopy(parents[0])
-        k2=deepcopy(parents[1])
-
-        x=before(k1)
-        y=after(k1)
-
-        part1=k1[x:y]
-        part2=k2[x:y]
-
-        k1[x:y]=part2
-        k2[x:y]=part1
+'''
+Croisement de deux parents donnant deux enfants
+@param parent1 : un individus d'une population
+@param parent2 : un individus d'une population
+@param b : la probabilité de croisement
+'''
+def partial_match_crossover(parent1, parent2,b):
+    if b<random.random():
+        return parent1,parent2
+    else:
+        length = len(parent1)
         
-        return k1,k2
+        # Choisissez deux points de coupure aléatoires
+        cut_point1, cut_point2 = sorted(random.sample(range(length), 2))
+    
+        # Initialisez les enfants en copiant les segments de parents entre les points de coupure
+        child1 = parent1[cut_point1:cut_point2]
+        child2 = parent2[cut_point1:cut_point2]
+    
+        # Complétez les enfants en préservant l'ordre des éléments non utilisés
+        unused1 = [gene for gene in parent2 if gene not in child1]
+        unused2 = [gene for gene in parent1 if gene not in child2]
+    
+        child1 += unused1
+        child2 += unused2
+    
+        return child1, child2
 
-def whoIsHorny(popu):
-    l=len(popu)//5
+'''
+Sélection d'un couple d'individus d'une population. On a pas de doublons.
+@param popu : une population
+@param d : proportion de la séléction, d*2 est la taille de la séléction
+@return view : une sélection dans la population
+@error d : il doit être plus grand ou égale à 1
+'''
+def whoIsHorny(popu,d):
+    if d<1:
+        raise ValueError("the parametre \"d\" must be greater than 1")
+    l=max(len(popu)//d,2)
     view=[]
     while l!=0:
         i=random.randint(1,len(popu)-1)
@@ -171,44 +194,108 @@ def whoIsHorny(popu):
     
     return view
 
-def giveNewPopu(popu,a,b):
 
-    print("-"*20+"On fait des gosses ici"+"-"*20)
+'''
+Engendre une nouvelle population après les possibles mutations et croisements.
+@param popu : une population sur lequel on se base
+@param a : probabilité de croisement
+@param b : probabilité de mutation
+@param d : proportion de la séléction
+@return choosed : la nouvelle population
+'''
+def giveNewPopu(popu,a,b,d):
 
-    choosed=whoIsHorny(popu)
+    print("-"*25+"On fait des gosses ici"+"-"*25)
+
+    choosed=whoIsHorny(popu,d)
     i=0
     while i<len(choosed):
-        p=[choosed[i],choosed[i+1]]
-        k=nsfw(p,a)
+        k=partial_match_crossover(choosed[i],choosed[i+1],a)
         if k is None:
             break
         choosed[i]=k[0]
         choosed[i+1]=k[1]
         i+=2
-    
     mutageneParty(choosed,b)
     return choosed
 
+'''
+Affiche les individus avec leur coût et donne le meilleur. On donne le coût du pire individus.
+@param popu : la population sur qui, on demande les informations
+@retrun lim : le plus grand coût de la population
+'''
 def allCost(popu):
     currMin=0
     cost=2002
+    lim=-273
     i=0
     b=0
+    w=0
     for s in popu:
-        i+=1
         score=fitness(s)
-        print(str(s)+"-->"+str(score)+"\n")
+        print(str(s)+"--->"+str(score)+"\n")
+        i+=1
         if score<cost:
             cost=score
             currMin=s
             b=i
+        elif score>lim:
+            lim=score
+            w=i-1
 
     print("Le meilleur c'est le "+str(b)+"e avec un coût de "+str(cost)+".")
+
+    return lim
+
+'''
+On applique la P-metaheuristique évolutionnaire. Elle comporte une séléction, un croisement et une mutation.
+La séléction est aléatoire mais elle prend deux individus successifs.
+Le croisement prend une partie de l'un et le transfert dans l'autre et inversement. La taille de la partie croisée est aléatoire.
+La mutation consiste à inverser une partie de l'individus.
+La nouvelle population est constitué des meilleurs individus à détail près.
+
+@author Razanajao Aina
+@param best : la population de base, la première génération
+@param a : probabilité de croisement en pourcentage
+@param b : probabilité de mutation en pourcentage
+@param c : la réduction des probabilités en porcentage
+@param d : proportion de la séléction
+@param lim : limite de coût présumé pour la génération suivante
+'''
+def lawOfLife(best,a,b,c,d,lim=1918):
+    allCost(best)
+    kids=giveNewPopu(best,a/100,b/100,d)
+    newLim=allCost(kids)
+
+    if newLim<lim:
+        lim=newLim
+
+    for p in best:
+        if fitness(p)>=lim:
+            best.remove(p)
     
+    newPopu=best+kids
+    popuClear=[]
+    for s in newPopu:
+        if s not in popuClear:
+            popuClear.append(s)
 
-allCost(giveNewPopu(firstPopu(20,n),0.85,0.32))
+    if len(newPopu)>20 or len(newPopu)<5 or a<10 or b < 10:
+        print("-"*25+"On va s'arrêter là je crois"+"-"*25)
+        print("La dernière génération est")
+        allCost(newPopu)
+    else:
+        print("-"*25+"Ah shit, here we go again"+"-"*25)
+        lawOfLife(newPopu,(a-c)/100,(b-c)/100,c,lim)
 
+lawOfLife(firstPopu(8,n),45,62,4,6)
 
-def lawOfLife(first,a,b):
-    allCost(giveNewPopu(first,a,b))
-
+'''
+Mon algorithme évolutif à une séléction et une mutation à tendance non diversifiant. De plus, la probabilité de mutation et de croisement baisse de plus en plus.
+Cela implique une convergence vers une stabilité au niveau des individus. Concernent le croisement, la taille du croisement est aléatoire. Je choisis de laisser
+la liberté au code de se diversifier ou non. Je tiens à faire disparaître les doutes, le code ne génère pas de doublons dans un individus. En addition à cela, la
+nouvelle population devrait être les meilleurs entre l'ancienne population et de la nouvelle. Néanmoins, le code refait un fitness() sur l'ancienne population.
+L'affichage de la population finale implique un appelle à la fonction allCost() refaisant un fitness sur la dernière population. Due à ma problématique et à mes
+faibles connaissances concernant les ordinateurs quantiques, je dois admettre que les coûts d'un individu calculés à des moments différents peuvent être différent.
+Cela ne garantit pas que mon code donne le meilleur coût obtenu mais il assure que l'individus est le meilleur.
+'''
