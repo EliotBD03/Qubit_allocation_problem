@@ -7,6 +7,7 @@ Created on Tue Nov 14 11:08:40 2023
 
 import numpy as np
 import time
+import sys
 from qiskit import QuantumCircuit
 from qiskit.transpiler import Layout
 from qiskit.transpiler.preset_passmanagers import generate_preset_pass_manager
@@ -140,10 +141,10 @@ def RVNS(n:int, neighborhoods: list, maxTime= float('inf')):
             #print("__" * 10)
             #print(" Shake Solution")
             s = ShakeSol(x, neighborhoods[k])
-            s,f_s = Local_Search(neighborhoods[k], s, len(s), True)
+            #s,f_s = Local_Search(neighborhoods[k], s, len(s), True)
 
             #print(" Get Fitness for: "  + str(s))
-            #f_s = fitness(s)
+            f_s = fitness(s)
             if(f_s < fx):
                 fx = f_s
                 x = s
@@ -159,7 +160,9 @@ def RVNS(n:int, neighborhoods: list, maxTime= float('inf')):
 def SVNS(n: int, neighborhoods: list, maxTime: (15 * 60), alpha: int):
     x = np.random.permutation(n)
     fx = fitness(x)
-
+    print("Starting with x= " + str(x))
+    
+    print("fx = " + str(fx))
     real_x,real_fx = x,fx
     
     startTime = time.time()
@@ -167,8 +170,10 @@ def SVNS(n: int, neighborhoods: list, maxTime: (15 * 60), alpha: int):
         k = 0
         while k < len(neighborhoods) and time.time() - startTime < maxTime:
             s = ShakeSol(x,neighborhoods[k])
-            best_s,f_bs = Local_Search(neighborhoods[k], s, len(s), True)
+            #best_s,f_bs = Local_Search(neighborhoods[k], s, len(s), True)
+            best_s,f_bs = s, fitness(s)
             if( f_bs - (alpha * distance(x,best_s)) < fx ):
+            #if( f_bs - (alpha * np.abs(f_bs - fx)) < fx ):
                 x = best_s
                 fx = f_bs
                 k = 0
@@ -181,7 +186,11 @@ def SVNS(n: int, neighborhoods: list, maxTime: (15 * 60), alpha: int):
             print("x = " + str(x))
             print("fx = " + str(fx))
         x,fx = real_x, real_fx
-            
+    if(fx < real_fx):
+        real_x,real_fx = x,fx
+        print("New Best Sol:")
+        print("x = " + str(x))
+        print("fx = " + str(fx))        
 
     return (real_x, real_fx)
 
@@ -358,6 +367,8 @@ nbOfMinutes = 15
 maxTime = (nbOfMinutes*60)/10
 print("Allowing " + str(maxTime) + " seconds for each instances")
 for i in range(1,10):
+    # Removes the randomness, for testing purpuses
+    np.random.seed(1)
     # Max 15 min -> 10 instance : (15* 60)/10 for each
     print("-_" * 32)
     print("-_"*15 + " INSTANCE: " + str(i) +"-_" * 15)
@@ -370,11 +381,12 @@ for i in range(1,10):
     m=backend.num_qubits
     #res.append(copy(VNS_Real(n, [nextInversionNeighbor, nextPermutationNeighbor])))
     #res.append(copy(RVNS(n, [nextPermutationNeighbor,nextInversionNeighbor],maxTime)))
-    res.append(copy(SVNS(n, [nextPermutationNeighbor,nextInversionNeighbor],maxTime,4)))
+    #print(sys.argv[1])
+    res.append(copy(SVNS(n, [nextPermutationNeighbor,nextInversionNeighbor],maxTime, float(sys.argv[1]))))
     
 print("=_=" * 20)
 for i in range(len(res)):
-    print("Solution for each instances : " + str((i)*2))
+    print("Solution for each instances : " + str((i+1)))
     print(res[i][0])
     print("With a cost of:")
     print(res[i][1])
