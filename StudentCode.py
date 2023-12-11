@@ -8,12 +8,23 @@ Created on Tue Nov 14 11:08:40 2023
 import numpy as np
 import time
 import sys
+import threading
 from qiskit import QuantumCircuit
 from qiskit.transpiler import Layout
 from qiskit.transpiler.preset_passmanagers import generate_preset_pass_manager
 from qiskit.providers.fake_provider import FakeSingaporeV2,FakeWashingtonV2,FakeCairoV2
 
+class NewThread(threading.Thread):
+    def __init__(self, group=None, target=None, name=None, args=(), kwargs={}):
+        threading.Thread.__init__(self, group, target, name, args, kwargs)
 
+    def run(self):
+        if self._target != None:
+            self._return = self._target(*self._args, **self._kwargs)
+
+    def join(self, *args):
+        threading.Thread.join(self, *args)
+        return self._return
 
 ##-------------------------------------------------------
 ##     Definition de la fonction objetif à minimiser
@@ -137,7 +148,7 @@ def RVNS(n:int, neighborhoods: list, maxTime= float('inf')):
     startTime = time.time()
     while(time.time()-startTime < maxTime):
         k = 0
-        while(k < len(neighborhoods)):
+        while(k < len(neighborhoods) and time.time() - startTime < maxTime):
             #print("__" * 10)
             #print(" Shake Solution")
             s = ShakeSol(x, neighborhoods[k])
@@ -160,12 +171,15 @@ def RVNS(n:int, neighborhoods: list, maxTime= float('inf')):
 def SVNS(n: int, neighborhoods: list, maxTime: (15 * 60), alpha: int):
     x = np.random.permutation(n)
     fx = fitness(x)
+    #print("Starting RVNS")
+    startTime = time.time()
+    #x,fx = RVNS(n,neighborhoods, maxTime/5)
+    print("Starting SVNS")
     print("Starting with x= " + str(x))
     
     print("fx = " + str(fx))
     real_x,real_fx = x,fx
     
-    startTime = time.time()
     while(time.time() - startTime < maxTime):
         k = 0
         while k < len(neighborhoods) and time.time() - startTime < maxTime:
@@ -196,18 +210,20 @@ def SVNS(n: int, neighborhoods: list, maxTime: (15 * 60), alpha: int):
 
 
 
-def VNS_Real(size: int, nList: list, maxIt = 5):
+def VNS_Real(size: int, nList: list, maxTime = 100):
     i = 0
-    currIt = 1
+    startTime = time.time()
     nSize = len(nList)
-    print("GRASP starts")
-    best = GRASP(size, maxIt/2)
+    currIt = 0
+    #print("GRASP starts")
+    #best = GRASP(size, 3)
     print("VNS starts")
-    #best = (s,fitness(s))
+    s = np.random.permutation(size)
+    best = (s,fitness(s))
     shakedSol = []
     bestShakedSol = []
-    while i < nSize and currIt <= maxIt:
-        print("New iteration !\n    " + str(currIt))
+    while i < nSize and (time.time() - startTime) <= maxTime:
+        print("New iteration")
         shakedSol = ShakeSol(best[0], nList[i], size)
         bestShakedSol = Local_Search(nList[i], shakedSol, size)
         if (bestShakedSol[1] < best[1] or (acceptWithError(best[1], bestShakedSol[1], currIt))):
@@ -218,10 +234,11 @@ def VNS_Real(size: int, nList: list, maxIt = 5):
             print("______________________________________________")
             best = bestShakedSol
             i = 0
-            maxIt -= 1
+            
         else:
             i += 1
         currIt += 1
+            
 
     return best
 
@@ -361,18 +378,22 @@ def Local_Search(neighborhood, sol: list,size: int, firstImprovement = False):
 ##     Pour choisir une instance: 
 ##     Modifier instance_num ET RIEN D'AUTRE    
 ##-------------------------------------------------------
-res = []
+nbOfInstances = 10
+nbOfThreads = 4
+res = [[]] * (nbOfInstances -1)
 
-nbOfMinutes = 15
-maxTime = (nbOfMinutes*60)/10
+nbOfMinutes = 30
+maxTime = (nbOfMinutes*60)/(nbOfInstances-1)
 print("Allowing " + str(maxTime) + " seconds for each instances")
-for i in range(1,10):
+
+for i in range(1,nbOfInstances):
+    res[i-1] = []
     # Removes the randomness, for testing purpuses
-    np.random.seed(1)
+    #np.random.seed(0)
     # Max 15 min -> 10 instance : (15* 60)/10 for each
-    print("-_" * 32)
+    print("_-" * 36)
     print("-_"*15 + " INSTANCE: " + str(i) +"-_" * 15)
-    print("-_" * 32)
+    print("_-" * 36)
     instance_num= i    #### Entre 1 et 9 inclue
     backend_name,circuit_type,num_qubit=instance_selection(instance_num)
     backend,qc,qr=instance_characteristic(backend_name,circuit_type,num_qubit)
@@ -382,13 +403,24 @@ for i in range(1,10):
     #res.append(copy(VNS_Real(n, [nextInversionNeighbor, nextPermutationNeighbor])))
     #res.append(copy(RVNS(n, [nextPermutationNeighbor,nextInversionNeighbor],maxTime)))
     #print(sys.argv[1])
-    res.append(copy(SVNS(n, [nextPermutationNeighbor,nextInversionNeighbor],maxTime, float(sys.argv[1]))))
+    threads = []
+    print("Start Threads")
+    for j in range(nbOfThreads):
+        # j + 3
+        t = NewThread(target=SVNS, args=(n, [nextPermutationNeighbor,nextInversionNeighbor],maxTime, 2 + (j)))
+        #t = NewThread(target=RVNS, args=(n, [nextPermutationNeighbor,nextInversionNeighbor],maxTime))
+        t.start()
+        threads.append(t)
+
+    for j in range(nbOfThreads):
+        res[i-1].append(copy(threads[j].join()))
     
-print("=_=" * 20)
+
 for i in range(len(res)):
-    print("Solution for each instances : " + str((i+1)))
-    print(res[i][0])
-    print("With a cost of:")
-    print(res[i][1])
-    print("____________________________")
+    print("-=" * 10 + "Solution for instance : " + str((i+1)) + "=-" * 10)
+    for j in range(nbOfThreads):
+        print(res[i][j][0])
+        print("With a cost of:")
+        print(res[i][j][1])
+    print("")
 
