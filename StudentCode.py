@@ -8,7 +8,7 @@ Created on Tue Nov 14 11:08:40 2023
 import copy
 import numpy as np
 import matplotlib.pyplot as plt
-from threading import Thread
+from multiprocessing import Process
 from qiskit import QuantumCircuit
 from qiskit.transpiler import Layout
 from qiskit.transpiler.preset_passmanagers import generate_preset_pass_manager
@@ -100,11 +100,6 @@ m=backend.num_qubits
 import threading
 import numpy as np
 
-layout = list(range(n))
-
-
-np.random.shuffle(layout)
-
 def hill_climbing(layout, neigborhood_generation_method, size_tabu_list=10, nb_it=10):
     """
     The algorithm will generate a neighborhood from the best neighbor found
@@ -190,7 +185,7 @@ def gen_neighborhood_moving(layout):
 
     return neighborhood
 
-
+"""
 def cross(layout_1, layout_2):
     first_part_1 = np.random.choice(len(layout_1), len(layout_1) // 2, replace=False)
     first_part_1.sort()
@@ -223,6 +218,31 @@ def cross(layout_1, layout_2):
     if fitness(child_1) < fitness(child_2):
         return child_1
     return child_2
+"""
+
+def new_cross(layout):
+    """
+    The goal is to get new values inside one vector
+    by generating random index with wich we'll generate 
+    random values that are not currently present inside 
+    the vector.
+    """
+    index_generated = np.sort(np.random.choice(len(layout), len(layout) // 2, replace=False))
+
+    #complement_index = set(range(len(layout) // 2))
+    #complement_index = sorted(list(complement_index.symmetric_difference(set(index_generated))))
+    complement_index = [i for i in range(len(layout)) if i not in index_generated]
+    generated_numbers = []
+    new_layout = copy.copy(layout)
+    rng = np.random.default_rng()
+    for i in range(len(layout) // 2):
+        generated_number = rng.integers(m)
+        while generated_number in layout[complement_index] or generated_number in generated_numbers:
+            generated_number = rng.integers(m)
+        new_layout[index_generated[i]] = generated_number
+        generated_numbers.append(generated_number)
+
+    return new_layout
 
 
 def thread_task(id_thread, gen_neighborhood_method, nb_it, length_list, solutions, best_solution_so_far):
@@ -238,8 +258,8 @@ def thread_task(id_thread, gen_neighborhood_method, nb_it, length_list, solution
         print("--------------------------------------------------------------------")
 
         solutions_sorted_i = np.array(list(map(lambda x : fitness(x), solutions))).argsort()
-        chosen_solution_for_cross = np.random.choice(len(solutions) - 1, 2, replace=False)
-        solutions[id_thread] = cross(solutions[solutions_sorted_i[chosen_solution_for_cross[0]]], solutions[solutions_sorted_i[chosen_solution_for_cross[1]]])
+        chosen_solution_for_cross = np.random.choice(len(solutions) - 1, 1, replace=False)
+        solutions[id_thread] = new_cross(new_cross(best_solution_so_far))
         #solutions[id_thread] = cross(solutions[solutions_sorted_i[0]], solutions[solutions_sorted_i[1]])
 
 
@@ -255,17 +275,20 @@ def test_length(max_len_list):
     [threads[i].join() for i in range(0,max_len_list - 2)]
 
 def tabu_search_multi_threading(nb_threads=10):
+    layout = np.array(list(range(n)))
+    np.random.shuffle(layout)
+
     threads = [None] * (nb_threads)
 
     solutions = copy.copy(threads)
 
     for i in range(nb_threads):
-        solutions[i] = np.random.rand(m).argsort().tolist()[0:n]
+        solutions[i] = np.array(np.random.rand(m).argsort().tolist()[0:n])
 
     methods = [gen_neighborhood_inversion, gen_neighborhood_moving, gen_neighborhood_transposition]
     
     for i in range(len(threads)):
-        threads[i] = threading.Thread(target=thread_task, args=(i, gen_neighborhood_transposition, 10, 10, solutions, layout))
+        threads[i] = Process(target=thread_task, args=(i, gen_neighborhood_transposition, 5, 10, solutions, layout))
         threads[i].start()
         
     [threads[i].join() for i in range(nb_threads)]
@@ -273,7 +296,7 @@ def tabu_search_multi_threading(nb_threads=10):
     print(f"The best solution found => {layout} for a total cost of {fitness(layout)}")
             
 
-#tabu_search_multi_threading(10)
+tabu_search_multi_threading(10)
 
 """
 best_layout = hill_climbing(layout, gen_neighborhood_inversion)
