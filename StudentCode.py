@@ -9,6 +9,8 @@ import numpy as np
 import time
 import sys
 import threading
+from multiprocessing import Process, Queue, Pool, cpu_count
+
 from qiskit import QuantumCircuit
 from qiskit.transpiler import Layout
 from qiskit.transpiler.preset_passmanagers import generate_preset_pass_manager
@@ -18,7 +20,9 @@ class NewThread(threading.Thread):
     def __init__(self, group=None, target=None, name=None, args=(), kwargs={}):
         threading.Thread.__init__(self, group, target, name, args, kwargs)
 
+
     def run(self):
+        
         if self._target != None:
             self._return = self._target(*self._args, **self._kwargs)
 
@@ -26,15 +30,35 @@ class NewThread(threading.Thread):
         threading.Thread.join(self, *args)
         return self._return
 
+class NewProcess(Process):
+    def __init__(self,queue: Queue, args = ()):
+        super().__init__()
+        self.queue = queue
+        self.args = args
+
+    def run(self) -> None:
+        
+        res = Local_SearchOnRange(self.args[0],self.args[1], True)
+        self.queue.put(res)
+    
+
+
+
+
 ##-------------------------------------------------------
 ##     Definition de la fonction objetif à minimiser
 ##-------------------------------------------------------
+
+def fitness_thread(layout) -> tuple:
+    return (layout, fitness(layout))
+
 def fitness(layout) -> list:
     init_layout={qr[i]:layout[i] for i in range(len(layout))}
     init_layout=Layout(init_layout)
 
     pm = generate_preset_pass_manager(3,backend,initial_layout=init_layout)
     pm.layout.remove(1)
+
     pm.layout.remove(1)
 
     QC=pm.run(qc)
@@ -118,7 +142,6 @@ def VNS_FunnyVersion(n:int, neighborhoods: list, maxTime= float('inf')):
         if bestShakedSol[1] < currOpt[1]: # f(x'') < f_opt
             currOpt = (bestShakedSol[0],fx) # f_opt = f(x) et x_opt = x''
         
-        print(distance(bestShakedSol[0], x))
         if(bestShakedSol[1] - (10* distance(bestShakedSol[0],x))) < fx or ((bestShakedSol[0] == x).all()):
             print("Accepted")
             x = bestShakedSol[0]
@@ -170,7 +193,8 @@ def RVNS(n:int, neighborhoods: list, maxTime= float('inf')):
 
 def SVNS(n: int, neighborhoods: list, maxTime: (15 * 60), alpha: int):
     x = np.random.permutation(n)
-    fx = fitness(x)
+    fx = float('inf')
+    #fx = fitness(x)
     #print("Starting RVNS")
     startTime = time.time()
     #x,fx = RVNS(n,neighborhoods, maxTime/5)
@@ -185,7 +209,9 @@ def SVNS(n: int, neighborhoods: list, maxTime: (15 * 60), alpha: int):
         while k < len(neighborhoods) and time.time() - startTime < maxTime:
             s = ShakeSol(x,neighborhoods[k])
             #best_s,f_bs = Local_Search(neighborhoods[k], s, len(s), True)
-            best_s,f_bs = s, fitness(s)
+            best_s,f_bs = Local_SearchWithProcess(neighborhoods[k], s, len(s), 4)
+            print(best_s,f_bs)
+            #best_s,f_bs = s, fitness(s)
             if( f_bs - (alpha * distance(x,best_s)) < fx ):
             #if( f_bs - (alpha * np.abs(f_bs - fx)) < fx ):
                 x = best_s
@@ -219,13 +245,13 @@ def VNS_Real(size: int, nList: list, maxTime = 100):
     #best = GRASP(size, 3)
     print("VNS starts")
     s = np.random.permutation(size)
-    best = (s,fitness(s))
+    best = (s,float('inf'))
     shakedSol = []
     bestShakedSol = []
     while i < nSize and (time.time() - startTime) <= maxTime:
         print("New iteration")
         shakedSol = ShakeSol(best[0], nList[i], size)
-        bestShakedSol = Local_Search(nList[i], shakedSol, size)
+        bestShakedSol = Local_SearchWithProcess(nList[i], shakedSol, size,2)
         if (bestShakedSol[1] < best[1] or (acceptWithError(best[1], bestShakedSol[1], currIt))):
         
             print("NEW Solution !!!\n From :" + str(best[1]) + " to " + str(bestShakedSol[1]))    
@@ -322,7 +348,6 @@ def Greedy_Randomized_Construction(size):
     # This is bad but huh
     return np.random.permutation(size)
 
-
 def Local_Search(neighborhood, sol: list,size: int, firstImprovement = False):
     curr = 0
     currBestList = []
@@ -336,6 +361,81 @@ def Local_Search(neighborhood, sol: list,size: int, firstImprovement = False):
                     break
     #print("     Local search result: " + str(currMin))
     return (currBestList, currMin)
+
+def Local_SearchWithThread(neighborhood, sol: list, size:int, nbOfThreads: int):
+    curr = 0
+    threads = []
+    currBestList = []
+    currMin = float('inf')
+    # Get all neighbors
+    neighbors = [copy(n) for n in neighborhood(sol, size)]
+    threadRange = int(len(neighbors) / nbOfThreads)
+    for i in range(nbOfThreads):
+        print("Started Thread: " + str(i))
+        t = NewThread(target=Local_SearchOnRange,args=(neighbors[i*threadRange:i*threadRange + threadRange],sol))
+        threads.append(t)
+        t.start()
+    for i in range(nbOfThreads):
+        curr = threads[i].join()
+        if (curr[1] < currMin):
+            currMin = curr[1]
+            currBestList = curr[0]
+    return (currBestList, currMin) 
+
+
+def Local_SearchWithProcess(neighborhood, sol: list, size:int, nbOfProcess: int):
+    curr = 0
+    processes = []
+    currBestList = []
+    currMin = float('inf')
+    queue = Queue()
+    # Get all neighbors
+    neighbors = [copy(n) for n in neighborhood(sol, size)]
+    threadRange = int(len(neighbors) / nbOfProcess)
+    i = 0
+    while i < nbOfProcess-1:
+        #print("Started Process: " + str(i))
+        #p = NewThread(target=Local_SearchOnRange,args=(neighbors[i*threadRange:i*threadRange + threadRange],sol))
+        p = NewProcess(queue=queue,args=(neighbors[i*threadRange:i*threadRange + threadRange],sol))
+        processes.append(p)
+        p.start()
+        i += 1
+    p = NewProcess(queue=queue,args=(neighbors[i*threadRange:],sol))
+    processes.append(p)
+    p.start()
+
+    i = 0
+    while i < nbOfProcess:
+        curr = queue.get()
+        
+        i += 1
+        
+        if (curr[1] < currMin):
+            currMin = curr[1]
+            currBestList = curr[0]
+    return (currBestList, currMin) 
+
+
+
+
+
+def Local_SearchOnRange(neighborhoodList: list, sol: list, firstBestResult= False):
+    curr= 0
+    currBestList = sol
+    currMin = fitness(sol)
+    for i in range(len(neighborhoodList)):
+
+        curr = fitness(neighborhoodList[i])
+
+        if(curr < currMin):
+
+            currBestList = neighborhoodList[i]
+            currMin = curr
+            if(firstBestResult):
+                return (currBestList,curr)
+
+    return (currBestList,curr)
+        
 
 
 #for i in nextMovementNeighbor(list(range(4)), 4):
@@ -379,15 +479,29 @@ def Local_Search(neighborhood, sol: list,size: int, firstImprovement = False):
 ##     Modifier instance_num ET RIEN D'AUTRE    
 ##-------------------------------------------------------
 nbOfInstances = 10
-nbOfThreads = 4
-res = [[]] * (nbOfInstances -1)
+nbOfThreads = cpu_count()
+res = []
 
-nbOfMinutes = 30
+
+
+
+nbOfMinutes = 13
 maxTime = (nbOfMinutes*60)/(nbOfInstances-1)
 print("Allowing " + str(maxTime) + " seconds for each instances")
 
+"""
+Start = time.time()
+print("Without Threads:")
+#print(Local_Search(nextPermutationNeighbor,perm,n))
+print("It took: "+ str(time.time() - Start )  + "seconds")
+Start = time.time()
+print("With Threads:")
+print(Local_SearchWithProcess(nextPermutationNeighbor,perm,n,nbOfThreads))
+print("It took: "+ str(time.time() - Start)  + "seconds")
+"""
+
+
 for i in range(1,nbOfInstances):
-    res[i-1] = []
     # Removes the randomness, for testing purpuses
     #np.random.seed(0)
     # Max 15 min -> 10 instance : (15* 60)/10 for each
@@ -400,27 +514,15 @@ for i in range(1,nbOfInstances):
 
     n=num_qubit
     m=backend.num_qubits
-    #res.append(copy(VNS_Real(n, [nextInversionNeighbor, nextPermutationNeighbor])))
-    #res.append(copy(RVNS(n, [nextPermutationNeighbor,nextInversionNeighbor],maxTime)))
-    #print(sys.argv[1])
-    threads = []
-    print("Start Threads")
-    for j in range(nbOfThreads):
-        # j + 3
-        t = NewThread(target=SVNS, args=(n, [nextPermutationNeighbor,nextInversionNeighbor],maxTime, 2 + (j)))
-        #t = NewThread(target=RVNS, args=(n, [nextPermutationNeighbor,nextInversionNeighbor],maxTime))
-        t.start()
-        threads.append(t)
 
-    for j in range(nbOfThreads):
-        res[i-1].append(copy(threads[j].join()))
+    res.append(SVNS(n,[nextInversionNeighbor,nextPermutationNeighbor],maxTime,5))
     
-
+    
+    
+print("\n" * 10)
 for i in range(len(res)):
     print("-=" * 10 + "Solution for instance : " + str((i+1)) + "=-" * 10)
-    for j in range(nbOfThreads):
-        print(res[i][j][0])
-        print("With a cost of:")
-        print(res[i][j][1])
+    print(res[i][0])
+    print("With a cost of: " + str(res[i][1]))
     print("")
 
