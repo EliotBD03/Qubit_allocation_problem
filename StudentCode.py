@@ -80,7 +80,7 @@ def instance_selection(instance_num):
 ##     Pour choisir une instance: 
 ##     Modifier instance_num ET RIEN D'AUTRE    
 ##-------------------------------------------------------
-instance_num=1     #### Entre 1 et 9 inclue
+instance_num=7     #### Entre 1 et 9 inclue
 
 backend_name,circuit_type,num_qubit=instance_selection(instance_num)
 backend,qc,qr=instance_characteristic(backend_name,circuit_type,num_qubit)
@@ -249,17 +249,18 @@ def thread_task(id_thread, gen_neighborhood_method, nb_it, length_list, solution
     for i in range(nb_it, -1, -1):
         print(f"Started thread : {id_thread} with the current solution {solutions[id_thread]}")
         solutions[id_thread]= hill_climbing(solutions[id_thread], gen_neighborhood_inversion, i % length_list)
-        if(fitness(best_solution_so_far) > fitness(solutions[id_thread])):
-            best_solution_so_far = solutions[id_thread]
+       
         print("--------------------------------------------------------------------")
         print(f"thread : {id_thread} has found the solution {solutions[id_thread]}")
         print(f"n={n}, m={m} et fitness_test={fitness(solutions[id_thread])}. Instance {instance_num} ok !")
         print(f"length of the tabu list : {length_list}, nb_it : {nb_it}, neighborhood_method : {gen_neighborhood_method}")
         print("--------------------------------------------------------------------")
-
-        solutions_sorted_i = np.array(list(map(lambda x : fitness(x), solutions))).argsort()
-        chosen_solution_for_cross = np.random.choice(len(solutions) - 1, 1, replace=False)
-        solutions[id_thread] = new_cross(new_cross(best_solution_so_far))
+        if(fitness(best_solution_so_far) > fitness(solutions[id_thread])):
+            print(f"UPDATED SOLUTION SO FAR : from {best_solution_so_far} -> {solutions[id_thread]}")
+            best_solution_so_far = solutions[id_thread]
+       # solutions_sorted_i = np.array(list(map(lambda x : fitness(x), solutions))).argsort()
+        #chosen_solution_for_cross = np.random.choice(len(solutions) - 1, 1, replace=False)
+        solutions[id_thread] = np.array(np.random.rand(m).argsort().tolist()[0:n])
         #solutions[id_thread] = cross(solutions[solutions_sorted_i[0]], solutions[solutions_sorted_i[1]])
 
 
@@ -295,8 +296,16 @@ def tabu_search_multi_threading(nb_threads=10):
 
     print(f"The best solution found => {layout} for a total cost of {fitness(layout)}")
             
+for i in range(1,10):
+    print(f"-----------------------------INSTANCE {i}--------------------------------------")
+    instance_num=i     #### Entre 1 et 9 inclue
 
-tabu_search_multi_threading(10)
+    backend_name,circuit_type,num_qubit=instance_selection(instance_num)
+    backend,qc,qr=instance_characteristic(backend_name,circuit_type,num_qubit)
+
+    n=num_qubit
+    m=backend.num_qubits
+    tabu_search_multi_threading(5)
 
 """
 best_layout = hill_climbing(layout, gen_neighborhood_inversion)
