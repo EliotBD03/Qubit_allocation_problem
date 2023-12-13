@@ -11,6 +11,23 @@ from qiskit.transpiler import Layout
 from qiskit.transpiler.preset_passmanagers import generate_preset_pass_manager
 from qiskit.providers.fake_provider import FakeSingaporeV2,FakeWashingtonV2,FakeCairoV2
 
+from multiprocessing import Process, active_children, Queue
+
+class NewProcess(Process):
+    def __init__(self, queue: Queue, args = ()):
+        super().__init__()
+        self.daemon = True
+        self.queue = queue
+        self.args = args
+
+    def run(self):
+        try:
+            res = simulated_annealing(*self.args)
+            self.queue.put(res)
+        except KeyboardInterrupt:
+            pass
+
+
 ##-------------------------------------------------------
 ##     Selection de l'instance du probleme
 ##-------------------------------------------------------
@@ -63,7 +80,7 @@ def instance_selection(instance_num):
 ##     Pour choisir une instance: 
 ##     Modifier instance_num ET RIEN D'AUTRE    
 ##-------------------------------------------------------
-instance_num=8     #### Entre 1 et 9 inclue
+instance_num=7     #### Entre 1 et 9 inclue
 
 backend_name,circuit_type,num_qubit=instance_selection(instance_num)
 backend,qc,qr=instance_characteristic(backend_name,circuit_type,num_qubit)
@@ -115,10 +132,10 @@ def generate_new_layout_random(layout, m):
     return new_layout
 
     
-layout = np.random.choice(m, n, replace=False)
-fitness(layout)
-
-print(f"n={n}, m={m} et fitness_test={fitness(layout)}. Instance {instance_num} ok !")
+# layout = np.random.choice(m, n, replace=False)
+# fitness(layout)
+#
+# print(f"n={n}, m={m} et fitness_test={fitness(layout)}. Instance {instance_num} ok !")
 
 # np.random.shuffle(layout)
 # fitness(layout)
@@ -144,6 +161,7 @@ Current best results :
 [19, 9, 16, 10, 4, 1, 5, 14, 12, 7, 15, 3, 11, 2, 0, 18, 13, 8, 17, 6]
 n=20, m=27 et fitness_test=63. Instance 1 ok !
 """
+target = 22
 def simulated_annealing(layout, T=1, alpha=0.99, time_limit=10, return_results=[], qr=qr, qc=qc, backend=backend, _type=1, instance=1, m=m):
     """
     Simulated annealing algorithm for the layout problem
@@ -170,7 +188,6 @@ def simulated_annealing(layout, T=1, alpha=0.99, time_limit=10, return_results=[
         The type of simulated annealing to use. The default is 1 (swap two elements, intensification). Other values are 2 (generate a new random layout, diversification).
     """
     print(f"Starting simulated annealing... Type : {_type}. Instance {instance}")
-    _b_time = time.time()
     layout1 = layout.copy()
     T_copy = deepcopy(T)
     fitness1 = fitness(layout1, qr=qr, qc=qc, backend=backend)
@@ -182,7 +199,10 @@ def simulated_annealing(layout, T=1, alpha=0.99, time_limit=10, return_results=[
 
     print(f"Simulated annealing starting for instance {instance}...")
 
-    while time.time() - _b_time < time_limit:
+    start_time = time.time()
+
+    # Run the algorithm for 'time_limit' seconds (of thread actual running time)
+    while time.time() - start_time < time_limit and best_fitness > target:
         # Generate a new layout
         match _type:
             case 1:
@@ -197,6 +217,9 @@ def simulated_annealing(layout, T=1, alpha=0.99, time_limit=10, return_results=[
         if new_fitness1 < fitness1 or rand_values.pop() < np.exp((fitness1 - new_fitness1) / T_copy):
             layout1, fitness1 = new_layout1, new_fitness1
             bests_list.append((layout1, fitness1))
+            with open(f"./outputs/output_{instance_num}.txt", "a") as file:
+                file.write(f"{layout1}\n")
+                file.write(f"n={n}, m={m} et fitness_test={fitness1}. Instance {instance} !\n----------------\n")
             if fitness1 < best_fitness:
                 best_fitness, best_layout = fitness1, layout1
 
@@ -207,7 +230,10 @@ def simulated_annealing(layout, T=1, alpha=0.99, time_limit=10, return_results=[
 
     print(f"Simulated annealing done for instance {instance} !")
 
-    return bests_list
+    # Keep the 5 bests and the 3 worsts
+    bests_list.sort(key=lambda x: x[1])
+
+    return bests_list[:5] + bests_list[-3:]
 
 
 def simulated_annealing_iteration(layout, iterations, T, alpha, qr, qc, backend):
@@ -218,6 +244,8 @@ def simulated_annealing_iteration(layout, iterations, T, alpha, qr, qc, backend)
     fitness1 = fitness(layout1, qr, qc, backend)
     best_fitness = fitness1
     best_layout = layout1
+    n = len(layout)
+    m = backend.num_qubits
     rand_values = np.random.rand(iterations).tolist()  # Precompute random values
     for _ in range(iterations):
         new_layout1 = generate_new_layout_swap_two(layout1)
@@ -283,6 +311,10 @@ def multi_thread_simulated_annealing(layout, ex, reduction, thread_number=10, in
     for worker in workers:
         worker.join()
 
+    print(f"Simulated annealing done for instance {instance} !")
+    print(f"Layouts : {layouts}")
+    print(f"Fitnesses : {fitnesses}")
+
     # Get the best layout and fitness
     best_layout, best_fitness = min(zip(layouts, fitnesses), key=lambda x: x[1])
 
@@ -317,7 +349,7 @@ def _multi_thread_simulated_annealing(layout, ex, reduction, current_fitness, ta
     """
     while current_fitness > target_fitness and ex > 0.01:
         # Generate a new layout
-        results = simulated_annealing_iteration(layout, 10, ex, 0.99, qr, qc, backend)
+        results = simulated_annealing_iteration(layout, 10, ex, 0.9, qr, qc, backend)
 
         # Get the new layout and fitness
         new_layout, new_fitness = results
@@ -378,16 +410,17 @@ def multi_thread_simulated_annealing_intensification(bests, T=1, alpha=0.99, tim
     print(f"Final best layout and cost : {min(end_results, key=lambda x: x[0][1])}")
 #multi_thread_simulated_annealing_intensification(bests, T=1, alpha=0.8, time_limit=100)
 
+def run_all_instances(time=100):
+    print("Running all instances...")
+    processes = []
+    for instance_num in range(1, 10):
+        processes.append(Process(target=run_instance, args=(instance_num, time)))
+        processes[-1].start()
+    for process in processes:
+        process.join()
+    print("All instances done !")
 
-def run_all_instances():
-    threads = []
-    for i in range(1, 10):
-        threads.append(threading.Thread(target=run_instance, args=(i,)))
-        threads[-1].start()
-    for thread in threads:
-        thread.join()
-
-def run_instance(instance_num):
+def run_instance(instance_num, time=500):
     print(f"Running instance {instance_num}...")
     backend_name,circuit_type,num_qubit=instance_selection(instance_num)
     backend,qc,qr=instance_characteristic(backend_name,circuit_type,num_qubit)
@@ -398,63 +431,72 @@ def run_instance(instance_num):
     layout = np.random.choice(m, n, replace=False)
 
     file = open(f"./outputs/output_{instance_num}.txt", "w")
-    f1 = fitness(layout, qr=qr, qc=qc, backend=backend)
-    file.write(f"Random : f{layout}\n")
-    file.write(f"n={n}, m={m} et fitness_test={f1}. Instance {instance_num} ok !\n----------------\n")
-
-    file.write(f"Beginning diversification for instance {instance_num}...\n")
+    # f1 = fitness(layout, qr=qr, qc=qc, backend=backend)
+    # file.write(f"Random : f{layout}\n")
+    # file.write(f"n={n}, m={m} et fitness_test={f1}. Instance {instance_num} ok !\n----------------\n")
+    #
+    # file.write(f"Beginning diversification for instance {instance_num}...\n")
     print(f"Beginning diversification for instance {instance_num}...")
     print("Starting threads...")
-    bests = [[] for _ in range(2)]
-    threads = []
-    for i in range(2):
-        threads.append(threading.Thread(target=simulated_annealing, args=(layout, 100, 0.9, 1000, bests[i], qr, qc, backend, 2, instance_num, m)))
-        threads[-1].start()
-    for thread in threads:
-        thread.join()
-    
+    file.write(f"Beginning diversification for instance {instance_num}...\n")
+    file.write(f"Diversification starting ----------------\n")
+    file.close()
+    bests = [[] for _ in range(8)]
+    processes = []
+    queue = Queue()
+    for i in range(8):
+        processes.append(NewProcess(queue, args=(layout, 10, 0.9, time, bests[i], qr, qc, backend, 2, instance_num, m)))
+        processes[-1].start()
+    [process.join() for process in processes]
+
     # Merge the results of the threads
-    bests = bests[0] + bests[1]
+    bests = queue.get()
+    for i in range(1, 8):
+        bests += queue.get()
+
+    file = open(f"./outputs/output_{instance_num}.txt", "a")
 
     print(f"Diversification done for instance {instance_num} !")
-    file.write(f"\n\nBest layouts found after diversification :\n")
-    for (best_layout, best_fitness) in bests:
-        file.write(f"{best_layout}\n")
-        file.write(f"n={n}, m={m} et fitness_test={best_fitness}. Instance {instance_num} !\n----------------\n")
+    file.write(f"Diversification done for instance {instance_num} !\n")
 
     bests.sort(key=lambda x: x[1])
 
-    best_layouts = bests[:3] + bests[-2:] # Keep the 3 bests and the 2 worsts
+    best_layouts = bests[:5] + bests[-3:] # Keep the 3 bests and the 2 worsts
+    print(f"Best layouts : {best_layouts}")
 
-    bests_intensification = [[] for _ in range(min(5, len(best_layouts)))]
-    threads = []
+    bests_intensification = [[] for _ in range(min(8, len(best_layouts)))]
     file.write(f"\n\nStarting threads for intensification of 5 bests...\n")
     print("Starting threads...")
     file.write(f"\n5 bests : {best_layouts}\n")
-    for i in range(min(5, len(best_layouts))):
-        # Optimize the best layouts found with simulated annealing
-        threads.append(threading.Thread(target=simulated_annealing, args=(best_layouts[i][0], 1, 0.9, 1000, bests_intensification[i], qr, qc, backend, 1, instance_num, m)))
-        threads[-1].start()
-    for thread in threads:
-        thread.join()
+    file.write(f"Starting threads for intensification of bests...\n")
+    file.write(f"Intensification starting ----------------\n")
+    file.close()
+    processes = []
+    queue = Queue()
+    for i in range(min(8, len(best_layouts))):
+        processes.append(NewProcess(queue, args=(best_layouts[i][0], 1, 0.9, time*2, bests_intensification[i], qr, qc, backend, 1, instance_num, m)))
+        processes[-1].start()
+    [process.join() for process in processes]
+
+    file = open(f"./outputs/output_{instance_num}.txt", "a")
+
+    file.write(f"Intensification done for instance {instance_num} !\n")
 
     # Merge the results of the threads
     i_results = []
-    for i in range(len(bests_intensification)):
-        i_results += bests_intensification[i]
+    for i in range(min(8, len(best_layouts))):
+        i_results += queue.get()
 
     print(f"Intensification done for instance {instance_num} !")
-    file.write(f"\n\nBest layouts found after intensification :\n")
-    for (best_layout, best_fitness) in i_results:
-        file.write(f"{best_layout}\n")
-        file.write(f"n={n}, m={m} et fitness_test={best_fitness}. Instance {instance_num} !\n----------------\n")
 
-    print(f"Final best layout and cost : {min(min(i_results, key=lambda x: x[1])[1], min(bests, key=lambda x: x[1])[1])}")
-
-    file.write(f"\nFinal best cost : {min(min(i_results, key=lambda x: x[1])[1], min(bests, key=lambda x: x[1])[1])}")
+    # Print the best result found
+    i_results.sort(key=lambda x: x[1])
+    print(f"Best layout found : {i_results[0]}")
+    print(f"n={n}, m={m} et fitness_test={i_results[0][1]}. Instance {instance_num} !")
 
     file.close()
 
+    return i_results[0][1]
 
 
     # for instance_num in range(1, 10):
@@ -485,16 +527,44 @@ def run_instance(instance_num):
     #
     #     file.close()
 
-#run_all_instances()
+#run_all_instances(5000)
+best = np.inf
+# try:
+#     best = run_instance(7, 100)
+#     if best > target:
+#         print(f"Best : {best}. Retrying...")
+# # Intercept the KeyboardInterrupt exception to stop the program
+# except KeyboardInterrupt:
+#     print("KeyboardInterrupt !")
+#     # Kill all the processes
+#     for process in active_children():
+#         process.terminate()
 
-for instance_num in range(1, 10):
-    backend_name,circuit_type,num_qubit=instance_selection(instance_num)
-    backend,qc,qr=instance_characteristic(backend_name,circuit_type,num_qubit)
+while best > target:
+    try:
+        best = run_instance(7, 100)
+        if best > target:
+            print(f"Best : {best}. Retrying...")
+    # Intercept the KeyboardInterrupt exception to stop the program
+    except KeyboardInterrupt:
+        print("KeyboardInterrupt !")
+        # Kill all the processes
+        for process in active_children():
+            process.terminate()
+        break
 
-    n=num_qubit
-    layout = np.random.permutation(n)
 
-    multi_thread_simulated_annealing(layout, 100, 0.9, 8, instance=instance_num)
+#########################
+# TODO : Make this work #
+#########################
+# for instance_num in range(1, 10):
+#     backend_name,circuit_type,num_qubit=instance_selection(instance_num)
+#     backend,qc,qr=instance_characteristic(backend_name,circuit_type,num_qubit)
+#
+#     n=num_qubit
+#     layout = np.random.permutation(n)
+#
+#     multi_thread_simulated_annealing(layout, 10, 0.9, 8, instance=instance_num)
 
 
 ###### A faire : un algo d'optimisation qui minimise la fonction fitness,
