@@ -16,6 +16,12 @@ from qiskit.transpiler import Layout
 from qiskit.transpiler.preset_passmanagers import generate_preset_pass_manager
 from qiskit.providers.fake_provider import FakeSingaporeV2,FakeWashingtonV2,FakeCairoV2
 
+
+
+#global stopFirst
+#stopFirst = True
+
+
 class NewThread(threading.Thread):
     def __init__(self, group=None, target=None, name=None, args=(), kwargs={}):
         threading.Thread.__init__(self, group, target, name, args, kwargs)
@@ -162,34 +168,67 @@ def distance(perm1: list, perm2: list) -> int:
             res += 1
     return res
 
-def RVNS(n:int, neighborhoods: list, maxTime= float('inf')):
+def RVNS(n:int, neighborhoods: list, maxTime= 100000, stuckAfter=-1):
+    if(stuckAfter == -1):
+    
+        stuckAfter = maxTime / 6
+        print("StuckAfter set to: " + str(stuckAfter))
     x = np.random.permutation(n)
+    currStuckAfter = stuckAfter
+    stuckSince = 0
+    lastUnstuck = 0
+    divCount = 0
+    maxDiv = 2
     #fx = fitness(x)
     fx = float('inf')
+    real_x, real_fx = x,fx
     print("Starting with x= " + str(x))
     
     print("fx = " + str(fx))
     startTime = time.time()
-    while(time.time()-startTime < maxTime):
+    while(time.time()-startTime < maxTime):            
         k = 0
-        while(k < len(neighborhoods) and time.time() - startTime < maxTime):
+        while(k < len(neighborhoods) and time.time() - startTime < maxTime):     
+            if(stuckSince >= currStuckAfter):
+                print("Probably stuck, change x")
+                stuckSince = 0
+                # The stuck after counter is getting more strict as we are stuck
+                if (divCount <= maxDiv):
+                    currStuckAfter /= 2
+                    divCount += 1
+                lastUnstuck = time.time() - startTime
+                x = np.random.permutation(n)
+                fx = float('inf')
+
+            stuckSince = time.time() -startTime - lastUnstuck
+            print("Stuck since: " + str(stuckSince))
+            print("Time spent: " + str(time.time() - startTime) + " sec")
+            print("k = :" + str(k))
             #print("__" * 10)
             #print(" Shake Solution")
             s = ShakeSol(x, neighborhoods[k])
-            s,f_s = Local_SearchWithProcess(neighborhoods[k], s, len(s), 2)
 
+            s,f_s = Local_SearchWithProcess(neighborhoods[k], s, len(s), 4)
+            #print(s,f_s)
             #print(" Get Fitness for: "  + str(s))
             #f_s = fitness(s)
             if(f_s < fx):
                 fx = f_s
                 x = s
                 k = 0
-                print("New Solution:")
-                print("x = " + str(x))
-                print("fx = " + str(fx))
+                if(fx < real_fx):
+                    currStuckAfter = stuckAfter
+                    divCount = 0
+                    lastUnstuck = time.time() - startTime
+                    stuckSince = 0
+                    real_x,real_fx = x,fx
+                    print("_" * 20)
+                    print("New Solution:")
+                    print("x = " + str(x))
+                    print("fx = " + str(fx))
             else:
                 k += 1
-    return (x, fx)
+    return (real_x, real_fx)
 
 
 def SVNS(n: int, neighborhoods: list, maxTime: (15 * 60), alpha: int):
@@ -483,7 +522,7 @@ res = []
 
 
 
-nbOfMinutes = 10
+nbOfMinutes = 5
 maxTime = (nbOfMinutes*60)/(nbOfInstances-1)
 print("Allowing " + str(maxTime) + " seconds for each instances")
 
@@ -504,18 +543,18 @@ for i in range(1,nbOfInstances):
     #np.random.seed(0)
     # Max 15 min -> 10 instance : (15* 60)/10 for each
     print("_-" * 36)
-    print("-_"*15 + " INSTANCE: " + str(i) +"-_" * 15)
+    print("-_"*15 + " INSTANCE: " + str(9) +"-_" * 15)
     print("_-" * 36)
-    instance_num= 7    #### Entre 1 et 9 inclue
+    instance_num= 9    #### Entre 1 et 9 inclue
     backend_name,circuit_type,num_qubit=instance_selection(instance_num)
     backend,qc,qr=instance_characteristic(backend_name,circuit_type,num_qubit)
 
     n=num_qubit
     m=backend.num_qubits
     alpha = 1 +  m/n
-    #res.append(RVNS(n,[nextInversionNeighbor,nextPermutationNeighbor],maxTime))
-    print("Alpha= " + str(alpha))
-    res.append(SVNS(n,[nextInversionNeighbor,nextPermutationNeighbor],maxTime, alpha))
+    res.append(RVNS(n,[nextInversionNeighbor,nextPermutationNeighbor],maxTime))
+    #print("Alpha= " + str(alpha))
+    #res.append(SVNS(n,[nextInversionNeighbor,nextPermutationNeighbor],maxTime, alpha))
     
     
 print("\n" * 10)
@@ -529,4 +568,40 @@ res = input()
 if(res == "yes"):
     print("Thank you master now i can die in piece")
 else:
-    print("Keep Yourself Safe")
+    print("Keep YourThread Safe")
+
+
+
+""" 900 sec
+1: 47 | 47
+2: 46 | 69
+3: 67 | 68
+4: 68 | 74
+5: 57 |         
+6: 90 | 
+7: 23 | 50      (1500 sec)
+8: 30 | 52
+9: 43 | 53
+
+
+7:
+x = [ 4  3  0 14 26 18  2 23 21 17 15 24  1  6  7  8 12 16 10 19 22 20 13  5
+ 25  9 11]
+fx = 76
+x = [ 4  3 14  0 26 18  2 23 21  5 24  1 17  6  8  7 12 16 10 19 22 20 13 15
+ 25  9 11]
+fx = 67
+x = [ 4  3 21  0 26 18  2 23 14  5 15  1  6  7 17  8 12 16 19 10 22 20 13 24
+ 25  9 11]
+fx = 61
+[ 4 20  3  0 25 18  2 23 14  5  1 15  6  7 17  8 12 16 19 21 22 13 10 24
+ 26  9 11]
+With a cost of: 52
+
+
+x = [ 8 11  7 13 10  6  9 12  5 17 16  3 19 18  0  1 14  2  4 15]
+fx = 38
+
+
+
+"""
