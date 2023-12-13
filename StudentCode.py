@@ -164,7 +164,8 @@ def distance(perm1: list, perm2: list) -> int:
 
 def RVNS(n:int, neighborhoods: list, maxTime= float('inf')):
     x = np.random.permutation(n)
-    fx = fitness(x)
+    #fx = fitness(x)
+    fx = float('inf')
     print("Starting with x= " + str(x))
     
     print("fx = " + str(fx))
@@ -175,10 +176,10 @@ def RVNS(n:int, neighborhoods: list, maxTime= float('inf')):
             #print("__" * 10)
             #print(" Shake Solution")
             s = ShakeSol(x, neighborhoods[k])
-            #s,f_s = Local_Search(neighborhoods[k], s, len(s), True)
+            s,f_s = Local_SearchWithProcess(neighborhoods[k], s, len(s), 2)
 
             #print(" Get Fitness for: "  + str(s))
-            f_s = fitness(s)
+            #f_s = fitness(s)
             if(f_s < fx):
                 fx = f_s
                 x = s
@@ -217,14 +218,16 @@ def SVNS(n: int, neighborhoods: list, maxTime: (15 * 60), alpha: int):
                 x = best_s
                 fx = f_bs
                 k = 0
+                if(fx < real_fx):
+                    real_x,real_fx = x,fx
+                    print("New Best Sol:")
+                    print("x = " + str(x))
+                    print("fx = " + str(fx))
             else:
                 k+= 1
+            
 
-        if(fx < real_fx):
-            real_x,real_fx = x,fx
-            print("New Best Sol:")
-            print("x = " + str(x))
-            print("fx = " + str(fx))
+        
         x,fx = real_x, real_fx
     if(fx < real_fx):
         real_x,real_fx = x,fx
@@ -345,7 +348,7 @@ def GRASP(size, maxIteration) -> tuple:
     return BestSolution
 
 def Greedy_Randomized_Construction(size):
-    # This is bad but huh
+    # This is bad but nuh huh
     return np.random.permutation(size)
 
 def Local_Search(neighborhood, sol: list,size: int, firstImprovement = False):
@@ -391,7 +394,8 @@ def Local_SearchWithProcess(neighborhood, sol: list, size:int, nbOfProcess: int)
     queue = Queue()
     # Get all neighbors
     neighbors = [copy(n) for n in neighborhood(sol, size)]
-    threadRange = int(len(neighbors) / nbOfProcess)
+    # nbOfProcess + 1, because we can also use the main processus 
+    threadRange = int(len(neighbors) / (nbOfProcess + 1))
     i = 0
     while i < nbOfProcess-1:
         #print("Started Process: " + str(i))
@@ -437,11 +441,6 @@ def Local_SearchOnRange(neighborhoodList: list, sol: list, firstBestResult= Fals
     return (currBestList,curr)
         
 
-
-#for i in nextMovementNeighbor(list(range(4)), 4):
-#    print(i)
-
-
 ###### A faire : un algo d'optimisation qui minimise la fonction fitness,
 ###### fonction qui accepte en entrée :
 ###### une liste de n parmi m (n<=m) entiers deux à deux distincts
@@ -478,14 +477,13 @@ def Local_SearchOnRange(neighborhoodList: list, sol: list, firstBestResult= Fals
 ##     Pour choisir une instance: 
 ##     Modifier instance_num ET RIEN D'AUTRE    
 ##-------------------------------------------------------
-nbOfInstances = 10
+nbOfInstances = 2
 nbOfThreads = cpu_count()
 res = []
 
 
 
-
-nbOfMinutes = 13
+nbOfMinutes = 10
 maxTime = (nbOfMinutes*60)/(nbOfInstances-1)
 print("Allowing " + str(maxTime) + " seconds for each instances")
 
@@ -508,15 +506,16 @@ for i in range(1,nbOfInstances):
     print("_-" * 36)
     print("-_"*15 + " INSTANCE: " + str(i) +"-_" * 15)
     print("_-" * 36)
-    instance_num= i    #### Entre 1 et 9 inclue
+    instance_num= 7    #### Entre 1 et 9 inclue
     backend_name,circuit_type,num_qubit=instance_selection(instance_num)
     backend,qc,qr=instance_characteristic(backend_name,circuit_type,num_qubit)
 
     n=num_qubit
     m=backend.num_qubits
-
-    res.append(SVNS(n,[nextInversionNeighbor,nextPermutationNeighbor],maxTime,5))
-    
+    alpha = 1 +  m/n
+    #res.append(RVNS(n,[nextInversionNeighbor,nextPermutationNeighbor],maxTime))
+    print("Alpha= " + str(alpha))
+    res.append(SVNS(n,[nextInversionNeighbor,nextPermutationNeighbor],maxTime, alpha))
     
     
 print("\n" * 10)
@@ -525,4 +524,9 @@ for i in range(len(res)):
     print(res[i][0])
     print("With a cost of: " + str(res[i][1]))
     print("")
-
+print("Alors j'ai fait une masterclass(e) ou un quoicouflop?")
+res = input()
+if(res == "yes"):
+    print("Thank you master now i can die in piece")
+else:
+    print("Keep Yourself Safe")
