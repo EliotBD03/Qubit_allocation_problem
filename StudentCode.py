@@ -280,13 +280,13 @@ def lawOfLife(best,a,b,c,d,lim=1918):
         if s not in popuClear:
             popuClear.append(s)
 
-    if len(newPopu)>20 or len(newPopu)<5 or a<10 or b < 10:
+    if len(popuClear)>20 or len(popuClear)<5 or a<10 or b < 10:
         print("-"*25+"On va s'arrêter là je crois"+"-"*25)
         print("La dernière génération est")
-        allCost(newPopu)
+        allCost(popuClear)
     else:
         print("-"*25+"Ah shit, here we go again"+"-"*25)
-        lawOfLife(newPopu,(a-c)/100,(b-c)/100,c,lim)
+        lawOfLife(popuClear,(a-c)/100,(b-c)/100,c,lim)
 
 lawOfLife(firstPopu(8,n),45,62,4,6)
 
