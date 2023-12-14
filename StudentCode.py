@@ -94,81 +94,6 @@ m=backend.num_qubits
 # Depuis ce code, on sait que la solution est de la forme [0,1,2,...,n-1].
 # On peut donc tester la fonction fitness sur cette solution et optimiser son resultat.
 # La metaheuristique ne doit se baser que sur le layout et la fonction fitness.
-
-def layout_swap(layout):
-    new_layout = layout.copy()
-    i = np.random.randint(0, len(new_layout))
-    j = np.random.randint(0, len(new_layout))
-    new_layout[i], new_layout[j] = new_layout[j], new_layout[i]
-    return new_layout
-#
-# ## !!! LES POINTS SONT LES SOLUTIONS (FITNESS) !!!
-#
-# def ant_colony_optimization(layout, n_ants, n_iterations, alpha, beta, evaporation_rate, Q): #layout was points
-#     """
-#     n_ants: nombre fourmis
-#     alpha: impoortance pheromone
-#     beta: importance visibilite
-#     evaporation_rate: taux d'evaporation
-#     Q: poids du pheromone
-#     """
-#     # n_points = len(layout) n global utilisé
-#
-#     pheromone = np.ones((n, n))
-#     best_layout = None
-#     best_layout_cost = np.inf
-#     layout_list = []
-#     
-#     for iteration in range(n_iterations):
-#         paths = []
-#         path_lengths = []
-#         
-#         for ant in range(n_ants):
-#             visited = [False]*n
-#             current_point = np.random.randint(n)
-#             visited[current_point] = True
-#             path = [current_point]
-#             path_length = 0
-#             iter = 0
-#             
-#             while iter < n_iterations:
-#                 unvisited = np.where(np.logical_not(visited))[0]
-#                 probabilities = np.zeros(len(unvisited))
-#                 next_layout = layout_swap(layout)
-#                 cost = fitness(next_layout)
-#                 
-#                 for i, unvisited_point in enumerate(unvisited):
-#                     probabilities[i] = pheromone[current_point, unvisited_point]**alpha / cost**beta
-#                 
-#                 probabilities /= np.sum(probabilities)
-#                 
-#                 path.append(next_layout)
-#                 path_length += cost
-#                 
-#                 current_point = next_layout
-#                 iter += 1
-#             
-#             paths.append(path)
-#             path_lengths.append(path_length)
-#             
-#             if path_length < best_layout_cost:
-#                 best_layout = path
-#                 best_layout_cost = path_length
-#         
-#         pheromone *= evaporation_rate
-#         
-#         for path, path_length in zip(paths, path_lengths):
-#             for i in range(n-1):
-#                 pheromone[path[i], path[i+1]] += Q/path_length
-#             pheromone[path[-1], path[0]] += Q/path_length
-#     
-#         
-# # Example usage:
-#
-# layout = np.random.permutation(n) 
-# ant_colony_optimization(layout, n_ants=10, n_iterations=100, alpha=1, beta=1, evaporation_rate=0.5, Q=1)
-
-
 ###### A faire : un algo d'optimisation qui minimise la fonction fitness,
 ###### fonction qui accepte en entrée :
 ###### une liste de n parmi m (n<=m) entiers deux à deux distincts
@@ -179,6 +104,14 @@ def layout_swap(layout):
 ###### crée un problème à l'execution si le chemin n'est pas le bon,
 ###### en particulier sous Linux. Essayer de la remplacer par
 ###### qasmfile=f"./Instances/{l.rstrip()}.qasm". Cela devrait résoudre le problème.
+
+
+def layout_swap(layout):
+    new_layout = layout.copy()
+    i = np.random.randint(0, len(new_layout))
+    j = np.random.randint(0, len(new_layout))
+    new_layout[i], new_layout[j] = new_layout[j], new_layout[i]
+    return new_layout
 
 
 def aco(layout, num_ants=10, num_iterations=100, rho=0.1, alpha=1.0, beta=2.0):
