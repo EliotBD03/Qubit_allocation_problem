@@ -127,10 +127,10 @@ Mutation sur les individus.
 @error lim : ce paramètre doit être strictement plus petit que 1
 '''
 def mutageneParty(popu,lim):
-    if lim >= 1:
+    if lim/100 >= 1:
         raise ValueError("You cannot do this with lim="+lim+". It must be less than 1")
     for s in popu:
-        if random.random()<=lim:
+        if random.random()<=lim/100:
             p=random.randint(0,len(s)-1)
             q=random.randint(0,len(s)-1)
             if p!=q:
@@ -143,6 +143,17 @@ def mutageneParty(popu,lim):
                     tmp.reverse()
                     s[q:p]=tmp
 
+def afterParty(popu,lim):
+    if lim/100 >= 1:
+        raise ValueError("You cannot do this with lim="+lim+". It must be less than 1")
+    for s in popu:
+        if random.random()<=lim/100:
+            p=random.randint(0,len(s)-1)
+            q=random.randint(0,len(s)-1)
+            if p!=q:
+                s[p],s[q]=s[q],s[p]
+
+
 '''
 Croisement de deux parents donnant deux enfants
 @param parent1 : un individus d'une population
@@ -150,7 +161,7 @@ Croisement de deux parents donnant deux enfants
 @param b : la probabilité de croisement
 '''
 def partial_match_crossover(parent1, parent2,b):
-    if b<random.random():
+    if b/100<random.random():
         return parent1,parent2
     else:
         length = len(parent1)
@@ -183,7 +194,7 @@ def whoIsHorny(popu,d):
         raise ValueError("the parametre \"d\" must be greater than 1")
     l=max(len(popu)//d,2)
     view=[]
-    while l!=0:
+    while l>0:
         i=random.randint(1,len(popu)-1)
         if i in view or i+1 in view:
             l-=1
@@ -216,7 +227,8 @@ def giveNewPopu(popu,a,b,d):
         choosed[i]=k[0]
         choosed[i+1]=k[1]
         i+=2
-    mutageneParty(choosed,b)
+    #mutageneParty(choosed,b)
+    afterParty(choosed,b)
     return choosed
 
 '''
@@ -224,13 +236,14 @@ Affiche les individus avec leur coût et donne le meilleur. On donne le coût du
 @param popu : la population sur qui, on demande les informations
 @retrun lim : le plus grand coût de la population
 '''
-def allCost(popu):
+def allCost(popu,give):
     currMin=0
     cost=2002
     lim=-273
     i=0
     b=0
     w=0
+
     for s in popu:
         score=fitness(s)
         print(str(s)+"--->"+str(score)+"\n")
@@ -242,10 +255,13 @@ def allCost(popu):
         elif score>lim:
             lim=score
             w=i-1
+    
+    if give:
+        print("Le meilleur c'est le "+str(b)+"e avec un coût de "+str(cost)+".")
+    
+    return lim,popu[b]
 
-    print("Le meilleur c'est le "+str(b)+"e avec un coût de "+str(cost)+".")
-
-    return lim
+    
 
 '''
 On applique la P-metaheuristique évolutionnaire. Elle comporte une séléction, un croisement et une mutation.
@@ -262,10 +278,10 @@ La nouvelle population est constitué des meilleurs individus à détail près.
 @param d : proportion de la séléction
 @param lim : limite de coût présumé pour la génération suivante
 '''
-def lawOfLife(best,a,b,c,d,lim=1918):
-    allCost(best)
+def lawOfLife(best,a,b,c,d,lim=1918,last=False):
+    allCost(best,True)
     kids=giveNewPopu(best,a/100,b/100,d)
-    newLim=allCost(kids)
+    newLim,better=allCost(kids,True)
 
     if newLim<lim:
         lim=newLim
@@ -280,15 +296,39 @@ def lawOfLife(best,a,b,c,d,lim=1918):
         if s not in popuClear:
             popuClear.append(s)
 
-    if len(popuClear)>20 or len(popuClear)<5 or a<10 or b < 10:
+    if (not last) and (len(popuClear)<5 or a<10 or b < 10):
+        print("-"*25+"OK le meilleur va faire le multi-clonage !"+"-"*25)
+        kageJibunNoJutsu(better,78,69,6,6)
+    elif last:
         print("-"*25+"On va s'arrêter là je crois"+"-"*25)
-        print("La dernière génération est")
-        allCost(popuClear)
+        allCost(popuClear,True)
     else:
         print("-"*25+"Ah shit, here we go again"+"-"*25)
-        lawOfLife(popuClear,(a-c)/100,(b-c)/100,c,lim)
+        lawOfLife(popuClear,a-c,b-c,c,lim)
 
-lawOfLife(firstPopu(8,n),45,62,4,6)
+def kageJibunNoJutsu(best,a,b,c,d):
+    clone=[]
+    for i in range(10):
+        clone.append(best)
+
+    clone=whoIsHorny(clone,d)
+    i=0
+    while i<len(clone):
+        k=partial_match_crossover(clone[i],clone[i+1],a)
+        if k is None:
+            break
+        clone[i]=k[0]
+        clone[i+1]=k[1]
+        i+=2
+    #mutageneParty(choosed,b)
+    afterParty(clone,b)
+    allCost(clone,True)
+
+
+
+lawOfLife(firstPopu(16,n),80,58,6,4)
+
+
 
 '''
 Mon algorithme évolutif à une séléction et une mutation à tendance non diversifiant. De plus, la probabilité de mutation et de croisement baisse de plus en plus.
