@@ -66,7 +66,7 @@ def instance_selection(instance_num):
         return "Singapore","ghzall",19
     elif instance_num==12:
         return "Singapore","dj",19
-    elif instance_num==1:
+    elif instance_num==13:
         return "Cairo","ghz",19
     else:
         print("Choix d'une instance inexistance, instance 1 revoyé  par défaut")
@@ -94,32 +94,80 @@ m=backend.num_qubits
 # Depuis ce code, on sait que la solution est de la forme [0,1,2,...,n-1].
 # On peut donc tester la fonction fitness sur cette solution et optimiser son resultat.
 # La metaheuristique ne doit se baser que sur le layout et la fonction fitness.
-import random
 
-layout = list(range(n))
-fitness(layout)
+def layout_swap(layout):
+    new_layout = layout.copy()
+    i = np.random.randint(0, len(new_layout))
+    j = np.random.randint(0, len(new_layout))
+    new_layout[i], new_layout[j] = new_layout[j], new_layout[i]
+    return new_layout
+#
+# ## !!! LES POINTS SONT LES SOLUTIONS (FITNESS) !!!
+#
+# def ant_colony_optimization(layout, n_ants, n_iterations, alpha, beta, evaporation_rate, Q): #layout was points
+#     """
+#     n_ants: nombre fourmis
+#     alpha: impoortance pheromone
+#     beta: importance visibilite
+#     evaporation_rate: taux d'evaporation
+#     Q: poids du pheromone
+#     """
+#     # n_points = len(layout) n global utilisé
+#
+#     pheromone = np.ones((n, n))
+#     best_layout = None
+#     best_layout_cost = np.inf
+#     layout_list = []
+#     
+#     for iteration in range(n_iterations):
+#         paths = []
+#         path_lengths = []
+#         
+#         for ant in range(n_ants):
+#             visited = [False]*n
+#             current_point = np.random.randint(n)
+#             visited[current_point] = True
+#             path = [current_point]
+#             path_length = 0
+#             iter = 0
+#             
+#             while iter < n_iterations:
+#                 unvisited = np.where(np.logical_not(visited))[0]
+#                 probabilities = np.zeros(len(unvisited))
+#                 next_layout = layout_swap(layout)
+#                 cost = fitness(next_layout)
+#                 
+#                 for i, unvisited_point in enumerate(unvisited):
+#                     probabilities[i] = pheromone[current_point, unvisited_point]**alpha / cost**beta
+#                 
+#                 probabilities /= np.sum(probabilities)
+#                 
+#                 path.append(next_layout)
+#                 path_length += cost
+#                 
+#                 current_point = next_layout
+#                 iter += 1
+#             
+#             paths.append(path)
+#             path_lengths.append(path_length)
+#             
+#             if path_length < best_layout_cost:
+#                 best_layout = path
+#                 best_layout_cost = path_length
+#         
+#         pheromone *= evaporation_rate
+#         
+#         for path, path_length in zip(paths, path_lengths):
+#             for i in range(n-1):
+#                 pheromone[path[i], path[i+1]] += Q/path_length
+#             pheromone[path[-1], path[0]] += Q/path_length
+#     
+#         
+# # Example usage:
+#
+# layout = np.random.permutation(n) 
+# ant_colony_optimization(layout, n_ants=10, n_iterations=100, alpha=1, beta=1, evaporation_rate=0.5, Q=1)
 
-print(f"n={n}, m={m} et fitness_test={fitness(layout)}. Instance {instance_num} ok !")
-
-random.shuffle(layout)
-fitness(layout)
-print(f"n={n}, m={m} et fitness_test={fitness(layout)}. Instance {instance_num} ok !")
-
-def hill_climbing(layout):
-    best_fitness = fitness(layout)
-    best_layout = layout
-    for i in range(10):
-        new_layout = list(layout)
-        random.shuffle(new_layout)
-        new_fitness = fitness(new_layout)
-        if new_fitness < best_fitness:
-            best_fitness = new_fitness
-            best_layout = new_layout
-    return best_layout
-
-best_layout = hill_climbing(layout)
-print(f"{best_layout}")
-print(f"n={n}, m={m} et fitness_test={fitness(best_layout)}. Instance {instance_num} ok !")
 
 ###### A faire : un algo d'optimisation qui minimise la fonction fitness,
 ###### fonction qui accepte en entrée :
@@ -132,22 +180,46 @@ print(f"n={n}, m={m} et fitness_test={fitness(best_layout)}. Instance {instance_
 ###### en particulier sous Linux. Essayer de la remplacer par
 ###### qasmfile=f"./Instances/{l.rstrip()}.qasm". Cela devrait résoudre le problème.
 
-###### Voici un test (à supprimer !) pour s'assurer que tout va bien
-# for i in range(1,10):
-#     instance_num=i     #### Entre 1 et 9 inclue
-#
-#     backend_name,circuit_type,num_qubit=instance_selection(instance_num)
-#     backend,qc,qr=instance_characteristic(backend_name,circuit_type,num_qubit)
-#
-#     print(f"Instance {instance_num} : {backend_name}, {circuit_type}, {num_qubit} qubits")
-#     print(f"qc : {qc.draw()}")
-#     print(f"qr : {qr}")
-#
-#     n=num_qubit
-#     m=backend.num_qubits
-#     r=fitness(list(range(n)))
-#     print(f"n={n}, m={m} et fitness_test={r}. Instance {instance_num} ok !")
-#
-#
-#
 
+def aco(layout, num_ants=10, num_iterations=100, rho=0.1, alpha=1.0, beta=2.0):
+    """
+    num_ants: nombre de fourmis
+    num_iterations: nombre d'Itérations
+    rho: taux d'évaporation des phéromones
+    alpha: influence de la qualité de la solution
+    beta: influence des phéromones
+    """
+    ants = [layout_swap(layout) for _ in range(num_ants)]
+
+    best_solution = None
+    best_fitness = np.inf
+
+    for iteration in range(num_iterations):
+        fitness_values = [fitness(lay) for lay in ants]
+        print(fitness_values)
+
+        pheromones = np.ones((n, n))
+        selected_layouts = []
+        for ant_index in range(num_ants):
+            probabilities = [(pheromones[ants[ant_index][i-1]][j] ** alpha) * (1.0 / fitness_values[ant_index] ** beta) for i, j in enumerate(ants[ant_index])]
+            probabilities /= sum(probabilities)
+            selected_layouts.append(ants[ant_index][np.random.choice(n, p=probabilities)])
+
+        # Evaporation phéromones
+        for i in range(n):
+            for j in range(n):
+                pheromones[i][j] = (1 - rho) * pheromones[i][j]
+
+        # for ant_index in range(num_ants):
+        #     for i in range(n - 1):
+        #         pheromones[selected_layouts[ant_index][i]][selected_layouts[ant_index][i+1]] += 1 / fitness_values[ant_index]
+        
+        if min(fitness_values) < best_fitness:
+            best_solution = ants[fitness_values.index(min(fitness_values))]
+            best_fitness = min(fitness_values)
+
+    print("Meilleure solution:", best_solution)
+    print("Fitness de la meilleure solution:", best_fitness)
+
+layout = np.random.permutation(n)
+aco(layout, num_ants=10, num_iterations=100, rho=0.1, alpha=1.0, beta=2.0)
