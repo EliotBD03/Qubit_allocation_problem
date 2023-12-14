@@ -27,6 +27,20 @@ class NewProcess(Process):
         except KeyboardInterrupt:
             pass
 
+class NewProcessVNS(Process):
+    def __init__(self, queue: Queue, args = ()):
+        super().__init__()
+        self.daemon = True
+        self.queue = queue
+        self.args = args
+
+    def run(self):
+        try:
+            res = rvns(*self.args)
+            self.queue.put(res)
+        except KeyboardInterrupt:
+            pass
+
 
 ##-------------------------------------------------------
 ##     Selection de l'instance du probleme
@@ -115,7 +129,7 @@ import time
 from copy import deepcopy
 
 
-def generate_new_layout_swap_two(layout):
+def generate_new_layout_swap_two(layout, m=0, cur_layout=0):
     """
     Generate a new layout by swapping two elements of the layout
     """
@@ -124,11 +138,20 @@ def generate_new_layout_swap_two(layout):
     new_layout[i], new_layout[j] = new_layout[j], new_layout[i]
     return new_layout
 
-def generate_new_layout_random(layout, m):
+def generate_new_layout_random(layout, m, cur_layout):
     """
     Generate a new layout by generating a new random layout
     """
-    new_layout = np.random.choice(m, len(layout), replace=False)
+    new_layout = np.random.choice(m - (len(layout) * cur_layout), len(layout), replace=False)
+    return new_layout
+
+def generate_new_layout_add(layout, m, cur_layout):
+    """
+    Generate a new layout by adding a new element to the layout
+    """
+    new_layout = layout.copy()
+    new_element = np.random.randint(m - (len(layout) * cur_layout))
+    new_layout = list(map(lambda x: (x + new_element) % m, new_layout))
     return new_layout
 
     
@@ -141,16 +164,17 @@ def generate_new_layout_random(layout, m):
 # fitness(layout)
 # print(f"n={n}, m={m} et fitness_test={fitness(layout)}. Instance {instance_num} ok !")
 #
-# def hill_climbing(layout):
-#     best_fitness = fitness(layout)
-#     best_layout = layout
-#     for i in range(10):
-#         new_layout = generate_new_layout_swap_two(layout)
-#         new_fitness = fitness(new_layout)
-#         if new_fitness < best_fitness:
-#             best_fitness = new_fitness
-#             best_layout = new_layout
-#     return best_layout
+def hill_climbing(layout, goal, qr, qc, backend, time_limit):
+    best_fitness = fitness(layout, qr, qc, backend)
+    best_layout = layout
+    start_time = time.time()
+    while best_fitness > goal and time.time() - start_time < time_limit:
+        new_layout = generate_new_layout_swap_two(layout)
+        new_fitness = fitness(new_layout, qr, qc, backend)
+        if new_fitness < best_fitness:
+            best_fitness = new_fitness
+            best_layout = new_layout
+    return (best_layout, best_fitness)
 #
 # best_layout = hill_climbing(layout)
 # print(f"{best_layout}")
@@ -162,7 +186,7 @@ Current best results :
 n=20, m=27 et fitness_test=63. Instance 1 ok !
 """
 target = 22
-def simulated_annealing(layout, T=1, alpha=0.99, time_limit=10, return_results=[], qr=qr, qc=qc, backend=backend, _type=1, instance=1, m=m):
+def simulated_annealing(layout, T=1, alpha=0.99, time_limit=10, return_results=[], qr=qr, qc=qc, backend=backend, _type=1, instance=1, m=m, cur_layout=0, nbr_process=-1):
     """
     Simulated annealing algorithm for the layout problem
 
@@ -208,16 +232,16 @@ def simulated_annealing(layout, T=1, alpha=0.99, time_limit=10, return_results=[
             case 1:
                 new_layout1 = generate_new_layout_swap_two(layout1)
             case 2:
-                new_layout1 = generate_new_layout_random(layout1, m)
+                new_layout1 = generate_new_layout_random(layout1, m, cur_layout)
             case _:
-                new_layout1 = generate_new_layout_swap_two(layout1)
+                new_layout1 = generate_new_layout_add(layout1, m, cur_layout)
 
         new_fitness1 = fitness(new_layout1, qr=qr, qc=qc, backend=backend)
 
         if new_fitness1 < fitness1 or rand_values.pop() < np.exp((fitness1 - new_fitness1) / T_copy):
             layout1, fitness1 = new_layout1, new_fitness1
             bests_list.append((layout1, fitness1))
-            with open(f"./outputs/output_{instance_num}.txt", "a") as file:
+            with open(f"./outputs2/output_{instance}.txt", "a") as file:
                 file.write(f"{layout1}\n")
                 file.write(f"n={n}, m={m} et fitness_test={fitness1}. Instance {instance} !\n----------------\n")
             if fitness1 < best_fitness:
@@ -233,7 +257,66 @@ def simulated_annealing(layout, T=1, alpha=0.99, time_limit=10, return_results=[
     # Keep the 5 bests and the 3 worsts
     bests_list.sort(key=lambda x: x[1])
 
-    return bests_list[:5] + bests_list[-3:]
+    return bests_list[:nbr_process]
+
+
+def rvns(layout, neighborhoods, max_time, instance, m, cur_layout, qr=qr, qc=qc, backend=backend):
+    """
+    RVNS algorithm for the layout problem
+
+    Parameters
+    ----------
+    layout : list
+        The layout to optimize.
+    neighborhoods : list
+        The list of neighborhoods to use.
+    max_time : float
+        The maximum time to run the algorithm.
+    """
+    print(f"Starting RVNS for instance {instance} ...")
+
+    start_time = time.time()
+    print(f"Layout : {layout}")
+    layout1 = layout.copy()
+    fitness1 = fitness(layout1, qr, qc, backend)
+
+    best = (layout1, fitness1)
+
+    # Run the algorithm for 'max_time' seconds (of thread actual running time)
+    while time.time() - start_time < max_time:
+        # Generate a new layout
+        new_layout = generate_new_layout_swap_two(layout1)
+        new_fitness = fitness(new_layout, qr, qc, backend)
+
+        # If the new layout is better, update the current layout and fitness
+        if new_fitness < fitness(layout, qr, qc, backend):
+            layout1, fitness1 = new_layout, new_fitness
+            with open(f"./outputs2/output_{instance}.txt", "a") as file:
+                file.write(f"{layout1}\n")
+                file.write(f"n={n}, m={m} et fitness_test={fitness1}. Instance {instance} !\n----------------\n")
+            if fitness1 < best[1]:
+                best = (layout1, fitness1)
+                with open(f"./outputs2/output_{instance}.txt", "a") as file:
+                    file.write(f"Best : {best}\n")
+
+        # Else, try to find a better layout in the neighborhoods
+        else: 
+            k = 0
+            while k < 2 and time.time() - start_time < max_time:
+                new_layout = neighborhoods[k](layout1, m, cur_layout)
+                new_fitness = fitness(new_layout, qr, qc, backend)
+
+                hill_climbing_results = hill_climbing(new_layout, best[1], qr, qc, backend, max_time - (time.time() - start_time))
+                if hill_climbing_results[1] < best[1]:
+                    best = hill_climbing_results
+                    with open(f"./outputs2/output_{instance}.txt", "a") as file:
+                        file.write(f"Best : {best}\n")
+                    k = 0
+                else: k += 1
+
+
+    print(f"RVNS done for instance {instance} !")
+    return best
 
 
 def simulated_annealing_iteration(layout, iterations, T, alpha, qr, qc, backend):
@@ -414,10 +497,15 @@ def run_all_instances(time=100):
     print("Running all instances...")
     processes = []
     for instance_num in range(1, 10):
-        processes.append(Process(target=run_instance, args=(instance_num, time)))
+        processes.append(Process(target=run_instance, args=(deepcopy(instance_num), time)))
         processes[-1].start()
-    for process in processes:
+    for instance_num, process in enumerate(processes):
         process.join()
+        with open(f"./outputs2/output_{instance_num+1}.txt", "r") as file:
+            content = file.read()
+        date = datetime.now().isoformat()
+        with open(f"./outputs_instance{instance_num+1}/log_{date}.txt", "w") as file:
+            file.write(content)
     print("All instances done !")
 
 def run_instance(instance_num, time=500):
@@ -428,9 +516,13 @@ def run_instance(instance_num, time=500):
     n=num_qubit
     m=backend.num_qubits
 
-    layout = np.random.choice(m, n, replace=False)
+    # Number of times n fits in m
+    nbr_layouts = m // n
 
-    file = open(f"./outputs/output_{instance_num}.txt", "w")
+    # Generate the layouts, we restrain each threads to a certain interval to limit the number of duplicates
+    layouts = [np.random.choice(m - (n * i), n, replace=False) for i in range(nbr_layouts)]
+
+    file = open(f"./outputs2/output_{instance_num}.txt", "w")
     # f1 = fitness(layout, qr=qr, qc=qc, backend=backend)
     # file.write(f"Random : f{layout}\n")
     # file.write(f"n={n}, m={m} et fitness_test={f1}. Instance {instance_num} ok !\n----------------\n")
@@ -441,58 +533,116 @@ def run_instance(instance_num, time=500):
     file.write(f"Beginning diversification for instance {instance_num}...\n")
     file.write(f"Diversification starting ----------------\n")
     file.close()
-    bests = [[] for _ in range(8)]
+    process_count = 10
+    bests = [[] for _ in range(process_count)]
     processes = []
     queue = Queue()
-    for i in range(8):
-        processes.append(NewProcess(queue, args=(layout, 10, 0.9, time, bests[i], qr, qc, backend, 2, instance_num, m)))
+    for i in range(process_count):
+        processes.append(NewProcess(queue, args=(layouts[i % nbr_layouts], 10, 0.9, time, bests[i], qr, qc, backend, 2, instance_num, m, i % nbr_layouts, process_count)))
         processes[-1].start()
     [process.join() for process in processes]
 
     # Merge the results of the threads
-    bests = queue.get()
-    for i in range(1, 8):
+    bests = []
+    for i in range(process_count):
         bests += queue.get()
 
-    file = open(f"./outputs/output_{instance_num}.txt", "a")
+    file = open(f"./outputs2/output_{instance_num}.txt", "a")
 
     print(f"Diversification done for instance {instance_num} !")
     file.write(f"Diversification done for instance {instance_num} !\n")
 
     bests.sort(key=lambda x: x[1])
 
-    best_layouts = bests[:5] + bests[-3:] # Keep the 3 bests and the 2 worsts
+    best_layouts = bests[:process_count]
     print(f"Best layouts : {best_layouts}")
 
-    bests_intensification = [[] for _ in range(min(8, len(best_layouts)))]
+    bests_diversification = [[] for _ in range(min(process_count, len(best_layouts)))]
+    file.write(f"\n\nStarting threads for diversification of bests adding 1...\n")
+    print("Starting threads...")
+    file.write(f"\nBests : {best_layouts}\n")
+    file.write(f"Divsersification starting ----------------\n")
+    file.close()
+    for i in range(min(len(bests), process_count)):
+        processes.append(NewProcess(queue, args=(best_layouts[i][0], 10, 0.9, time, bests_diversification[i], qr, qc, backend, 3, instance_num, m, 0, process_count)))
+        processes[-1].start()
+    [process.join() for process in processes]
+
+    file = open(f"./outputs2/output_{instance_num}.txt", "a")
+    file.write(f"Divsersification done for instance {instance_num} !\n")
+
+    # Merge the results of the threads
+    bests = []
+    for i in range(process_count):
+        bests += queue.get()
+
+    bests.sort(key=lambda x: x[1])
+
+    best_layouts = bests[:process_count]
+
+    bests_intensification = [[] for _ in range(min(process_count, len(best_layouts)))]
     file.write(f"\n\nStarting threads for intensification of 5 bests...\n")
     print("Starting threads...")
-    file.write(f"\n5 bests : {best_layouts}\n")
+    file.write(f"\nBests : {best_layouts}\n")
     file.write(f"Starting threads for intensification of bests...\n")
     file.write(f"Intensification starting ----------------\n")
     file.close()
     processes = []
     queue = Queue()
-    for i in range(min(8, len(best_layouts))):
-        processes.append(NewProcess(queue, args=(best_layouts[i][0], 1, 0.9, time*2, bests_intensification[i], qr, qc, backend, 1, instance_num, m)))
+    for i in range(min(process_count, len(best_layouts))):
+        processes.append(NewProcess(queue, args=(best_layouts[i][0], 1, 0.9, time * 2, bests_intensification[i], qr, qc, backend, 1, instance_num, m, 0, process_count)))
         processes[-1].start()
     [process.join() for process in processes]
 
-    file = open(f"./outputs/output_{instance_num}.txt", "a")
+    file = open(f"./outputs2/output_{instance_num}.txt", "a")
 
     file.write(f"Intensification done for instance {instance_num} !\n")
 
     # Merge the results of the threads
     i_results = []
-    for i in range(min(8, len(best_layouts))):
+    for i in range(min(process_count, len(best_layouts))):
         i_results += queue.get()
 
-    print(f"Intensification done for instance {instance_num} !")
-
-    # Print the best result found
     i_results.sort(key=lambda x: x[1])
+
+    print(f"Intensification done for instance {instance_num} !")
+    file.write(f"Intensification done for instance {instance_num} !\n")
+    file.write(f"\nBest layouts found after intensification :\n")
+    file.write(f"{i_results[0][0]}\n")
+    file.write(f"n={n}, m={m} et fitness_test={i_results[0][1]}. Instance {instance_num} !\n----------------\n")
+
+    # RVNS for better Intensification
+    # print(f"Starting RVNS for instance {instance_num}...")
+    #
+    # queue = Queue()
+    # processes = []
+    # file.write(f"\n\nStarting threads for RVNS ...\n")
+    # file.write(f"RVNS starting ----------------\n")
+    # file.close()
+    # for i in range(min(process_count, len(i_results))):
+    #     processes.append(NewProcessVNS(queue, args=(i_results[i][0], [generate_new_layout_swap_two, generate_new_layout_random], time, instance_num, m, 0, qr, qc, backend)))
+    #     processes[-1].start()
+    # [process.join() for process in processes]
+    #
+    # print(f"RVNS done for instance {instance_num} !")
+    # file = open(f"./outputs2/output_{instance_num}.txt", "a")
+    # file.write(f"RVNS done for instance {instance_num} !\n\n")
+    #
+    # # Merge the results of the threads
+    # i_results = []
+    # for i in range(queue.qsize()):
+    #     i_results.append(queue.get())
+    #
+    # # Print the best result found 
+    # i_results.sort(key=lambda x: x[1])
+    # print(f"Best layout found : {i_results[0]}")
+    # print(f"n={n}, m={m} et fitness_test={i_results[0][1]}. Instance {instance_num} !")
+
+    file.write(f"\n\nBest layout found :\n")
+    file.write(f"{i_results[0][0]}\n")
+    file.write(f"n={n}, m={m} et fitness_test={i_results[0][1]}. Instance {instance_num} !\n----------------\n")
+
     print(f"Best layout found : {i_results[0]}")
-    print(f"n={n}, m={m} et fitness_test={i_results[0][1]}. Instance {instance_num} !")
 
     file.close()
 
@@ -540,19 +690,45 @@ best = np.inf
 #     for process in active_children():
 #         process.terminate()
 
-while best > target:
-    try:
-        best = run_instance(7, 100)
-        if best > target:
-            print(f"Best : {best}. Retrying...")
-    # Intercept the KeyboardInterrupt exception to stop the program
-    except KeyboardInterrupt:
-        print("KeyboardInterrupt !")
-        # Kill all the processes
-        for process in active_children():
-            process.terminate()
-        break
+from datetime import datetime
+date = datetime.now().isoformat()
 
+# Export the results to a log file
+# for instance_num in range(1, 10):
+#     with open(f"./outputs2/output_{instance_num}.txt", "r") as file:
+#         content = file.read()
+#     with open(f"./outputs_instance{instance_num}/log_{date}.txt", "w") as file:
+#         file.write(content)
+
+try:
+    run_all_instances(200)
+except KeyboardInterrupt:
+    print("KeyboardInterrupt !")
+    # Kill all the processes
+    for process in active_children():
+        process.terminate()
+
+# run_instance(7, 20)
+
+# while best > target:
+#     try:
+#         best = run_instance(7, 300)
+#         if best > target:
+#             print(f"Best : {best}. Retrying...")
+#             # Copy the content of the output file to a log file
+#             with open(f"./outputs/output_{instance_num}.txt", "r") as file:
+#                 content = file.read()
+#             date = datetime.now().isoformat()
+#             with open(f"./outputs_instance{instance_num}/log_{date}.txt", "w") as file:
+#                 file.write(content)
+#     # Intercept the KeyboardInterrupt exception to stop the program
+#     except KeyboardInterrupt:
+#         print("KeyboardInterrupt !")
+#         # Kill all the processes
+#         for process in active_children():
+#             process.terminate()
+#         break
+#
 
 #########################
 # TODO : Make this work #
