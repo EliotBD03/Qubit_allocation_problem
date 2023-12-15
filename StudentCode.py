@@ -37,14 +37,18 @@ class NewThread(threading.Thread):
         return self._return
 
 class NewProcess(Process):
-    def __init__(self,queue: Queue, args = ()):
+    def __init__(self,queue: Queue, args = (), functToCall = None):
         super().__init__()
         self.queue = queue
         self.args = args
+        self.funct = functToCall
 
     def run(self) -> None:
-        
-        res = Local_SearchOnRange(self.args[0],self.args[1], True)
+        res = ()
+        if(self.funct != None):
+            res = self.funct(self.args[0],self.args[1],self.args[2],self.args[3],self.args[4],False)
+        else:
+            res = Local_SearchOnRange(self.args[0],self.args[1], True)
         self.queue.put(res)
     
 
@@ -168,13 +172,11 @@ def distance(perm1: list, perm2: list) -> int:
             res += 1
     return res
 
-def RVNS(m:int, n:int, neighborhoods: list, maxTime= 100000, stuckAfter=-1):
-    if(stuckAfter == -1):
-    
-        stuckAfter = maxTime / 6
-        print("StuckAfter set to: " + str(stuckAfter))
+def RVNS(m:int, n:int, neighborhoods: list, maxTime= 100000, nbOfThreads=6, allowPanic = True):
+    print("Starting RVNS with " + str(nbOfThreads) +" threads allowed")
+
     x = np.random.choice(m,n,replace=False)
-    currStuckAfter = stuckAfter
+    
     #stuckSince = 0
     #lastUnstuck = 0
     #divCount = 0
@@ -189,20 +191,16 @@ def RVNS(m:int, n:int, neighborhoods: list, maxTime= 100000, stuckAfter=-1):
     startTime = time.time()
     while(time.time()-startTime < maxTime):
         k = 0
-        while(k < len(neighborhoods) and time.time() - startTime < maxTime):     
-            #if(stuckSince >= currStuckAfter):
-                #print("Probably stuck, change x")
-                #stuckSince = 0
-                # The stuck after counter is getting more strict as we are stuck
-                #if (divCount <= maxDiv):
-                    #currStuckAfter /= 2
-                    #divCount += 1
-                #lastUnstuck = time.time() - startTime
-            if notMoved > 10:
-                print("=" * 5)
-                print("I was stuck for " + str(notMoved) + "iteration, let\'s try another x")
-                x = np.random.choice(m,n,replace=False)
-                fx = float('inf')
+        if allowPanic and notMoved > 25:
+                notMoved = 0
+                print("=-" * 100)
+                print("Start Panic/Diversification Mode")
+                (x,fx) = DiversificationRVNS(m,n,neighborhoods,50,nbOfThreads//2)
+                print("Stop Diversification")
+                print("=-"*100)
+                print(x,fx)
+        while(k < len(neighborhoods) and time.time() - startTime < maxTime):
+            
 
             #stuckSince = time.time() -startTime - lastUnstuck
             #print("Stuck since: " + str(stuckSince))
@@ -211,21 +209,14 @@ def RVNS(m:int, n:int, neighborhoods: list, maxTime= 100000, stuckAfter=-1):
             #print("__" * 10)
             #print(" Shake Solution")
             s = ShakeSol(x, neighborhoods[k])
+            s,f_s = Local_SearchWithProcess(neighborhoods[k], s, len(s), nbOfThreads)
 
-            s,f_s = Local_SearchWithProcess(neighborhoods[k], s, len(s), 12)
-            #print(s,f_s)
-            #print(" Get Fitness for: "  + str(s))
-            #f_s = fitness(s)
             if(f_s < fx):
                 fx = f_s
                 x = s
                 k = 0
                 notMoved = 0
                 if(fx < real_fx):
-                    #currStuckAfter = stuckAfter
-                    #divCount = 0
-                    #lastUnstuck = time.time() - startTime
-                    #stuckSince = 0
                     real_x,real_fx = x,fx
                     print("_" * 20)
                     print("New Solution:")
@@ -235,6 +226,24 @@ def RVNS(m:int, n:int, neighborhoods: list, maxTime= 100000, stuckAfter=-1):
                 notMoved += 1
                 k += 1
     return (real_x, real_fx)
+
+
+def DiversificationRVNS(m:int, n:int, neighborhoods: list, maxTime= 100, nbOfThreads=3):
+    Q = Queue()
+    processes = []
+    for i in range(nbOfThreads):
+        p = NewProcess(Q, functToCall=RVNS, args=(m,n,neighborhoods,maxTime,nbOfThreads))
+        processes.append(p)
+        p.start()
+    currMin = float('inf')
+    currBestList = []
+    for i in range(nbOfThreads):
+        curr = Q.get()
+        
+        if (curr[1] < currMin):
+            currMin = curr[1]
+            currBestList = curr[0]
+    return (currBestList, currMin)
 
 
 def SVNS(n: int, neighborhoods: list, maxTime: (15 * 60), alpha: int):
@@ -359,7 +368,8 @@ def nextMovementNeighbor(l,n):
             nextList = list(copy(l))
 
 def nextAddNeighbor(l,n):
-    for i in range(m):
+    fake_m = np.random.randint(5,m)
+    for i in range(fake_m):
         for j in range(len(l)):
             l[j] = (l[j] + i) % m 
         yield l
@@ -437,7 +447,7 @@ def Local_SearchWithThread(neighborhood, sol: list, size:int, nbOfThreads: int):
 
 
 def Local_SearchWithProcess(neighborhood, sol: list, size:int, nbOfProcess: int):
-    curr = 0
+    curr = float('inf')
     processes = []
     currBestList = []
     currMin = float('inf')
@@ -527,13 +537,13 @@ def Local_SearchOnRange(neighborhoodList: list, sol: list, firstBestResult= Fals
 ##     Pour choisir une instance: 
 ##     Modifier instance_num ET RIEN D'AUTRE    
 ##-------------------------------------------------------
-nbOfInstances = 10
+nbOfInstances = 2
 nbOfThreads = cpu_count()
 res = []
 
 
 
-nbOfMinutes = 20 * 9
+nbOfMinutes = 15
 maxTime = (nbOfMinutes*60)/(nbOfInstances-1)
 print("Allowing " + str(maxTime) + " seconds for each instances")
 
@@ -550,39 +560,32 @@ print("It took: "+ str(time.time() - Start)  + "seconds")
 
 
 for i in range(1,nbOfInstances):
+    
     # Removes the randomness, for testing purpuses
     #np.random.seed(0)
     # Max 15 min -> 10 instance : (15* 60)/10 for each
-    instance_num= i    #### Entre 1 et 9 inclue
+    instance_num= 2    #### Entre 1 et 9 inclue
     print("_-" * 36)
     print("-_"*15 + " INSTANCE: " + str(instance_num) +"-_" * 15)
     print("_-" * 36)
     
     backend_name,circuit_type,num_qubit=instance_selection(instance_num)
     backend,qc,qr=instance_characteristic(backend_name,circuit_type,num_qubit)
-    
+    f = open("./results/resInst_" + str(instance_num), "w")
+
     n=num_qubit
     global m 
     m = backend.num_qubits
     alpha = 1 +  m/n
-    
-    res.append(RVNS(m,n,[nextInversionNeighbor,nextPermutationNeighbor,nextAddNeighbor],maxTime))
-    print("Alpha= " + str(alpha))
+    res = RVNS(m,n,[nextInversionNeighbor,nextPermutationNeighbor],maxTime)
+    f.write(str(res) + "\n" + ("_-_"*40) +"\n")
+    print(res)
+    #res.append(RVNS(m,n,[nextInversionNeighbor,nextPermutationNeighbor,nextAddNeighbor],maxTime))
+    #print("Alpha= " + str(alpha))
+    f.close()
     #res.append(SVNS(n,[nextAddNeighbor,nextInversionNeighbor,nextPermutationNeighbor],maxTime, alpha))
     
-    
-print("\n" * 10)
-for i in range(len(res)):
-    print("-=" * 10 + "Solution for instance : " + str((i+1)) + "=-" * 10)
-    print(res[i][0])
-    print("With a cost of: " + str(res[i][1]))
-    print("")
-print("Alors j'ai fait une masterclass(e) ou un quoicouflop?")
-res = input()
-if(res == "yes"):
-    print("Thank you master now i can die in piece")
-else:
-    print("Keep YourThread Safe")
+
 
 
 """ 1500 sec
