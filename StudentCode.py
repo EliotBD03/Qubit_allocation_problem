@@ -168,47 +168,51 @@ def distance(perm1: list, perm2: list) -> int:
             res += 1
     return res
 
-def RVNS(n:int, neighborhoods: list, maxTime= 100000, stuckAfter=-1):
+def RVNS(m:int, n:int, neighborhoods: list, maxTime= 100000, stuckAfter=-1):
     if(stuckAfter == -1):
     
         stuckAfter = maxTime / 6
         print("StuckAfter set to: " + str(stuckAfter))
-    x = np.random.permutation(n)
+    x = np.random.choice(m,n,replace=False)
     currStuckAfter = stuckAfter
-    stuckSince = 0
-    lastUnstuck = 0
-    divCount = 0
-    maxDiv = 2
+    #stuckSince = 0
+    #lastUnstuck = 0
+    #divCount = 0
+    #maxDiv = 1
+    notMoved = 0
     #fx = fitness(x)
     fx = float('inf')
     real_x, real_fx = x,fx
     print("Starting with x= " + str(x))
-    
+    # Idea, use several thread to find a better solution for the others when stuck !! *Emergency threads*    
     print("fx = " + str(fx))
     startTime = time.time()
-    while(time.time()-startTime < maxTime):            
+    while(time.time()-startTime < maxTime):
         k = 0
         while(k < len(neighborhoods) and time.time() - startTime < maxTime):     
-            if(stuckSince >= currStuckAfter):
-                print("Probably stuck, change x")
-                stuckSince = 0
+            #if(stuckSince >= currStuckAfter):
+                #print("Probably stuck, change x")
+                #stuckSince = 0
                 # The stuck after counter is getting more strict as we are stuck
-                if (divCount <= maxDiv):
-                    currStuckAfter /= 2
-                    divCount += 1
-                lastUnstuck = time.time() - startTime
-                x = np.random.permutation(n)
+                #if (divCount <= maxDiv):
+                    #currStuckAfter /= 2
+                    #divCount += 1
+                #lastUnstuck = time.time() - startTime
+            if notMoved > 10:
+                print("=" * 5)
+                print("I was stuck for " + str(notMoved) + "iteration, let\'s try another x")
+                x = np.random.choice(m,n,replace=False)
                 fx = float('inf')
 
-            stuckSince = time.time() -startTime - lastUnstuck
-            print("Stuck since: " + str(stuckSince))
+            #stuckSince = time.time() -startTime - lastUnstuck
+            #print("Stuck since: " + str(stuckSince))
             print("Time spent: " + str(time.time() - startTime) + " sec")
             print("k = :" + str(k))
             #print("__" * 10)
             #print(" Shake Solution")
             s = ShakeSol(x, neighborhoods[k])
 
-            s,f_s = Local_SearchWithProcess(neighborhoods[k], s, len(s), 4)
+            s,f_s = Local_SearchWithProcess(neighborhoods[k], s, len(s), 12)
             #print(s,f_s)
             #print(" Get Fitness for: "  + str(s))
             #f_s = fitness(s)
@@ -216,23 +220,25 @@ def RVNS(n:int, neighborhoods: list, maxTime= 100000, stuckAfter=-1):
                 fx = f_s
                 x = s
                 k = 0
+                notMoved = 0
                 if(fx < real_fx):
-                    currStuckAfter = stuckAfter
-                    divCount = 0
-                    lastUnstuck = time.time() - startTime
-                    stuckSince = 0
+                    #currStuckAfter = stuckAfter
+                    #divCount = 0
+                    #lastUnstuck = time.time() - startTime
+                    #stuckSince = 0
                     real_x,real_fx = x,fx
                     print("_" * 20)
                     print("New Solution:")
                     print("x = " + str(x))
                     print("fx = " + str(fx))
             else:
+                notMoved += 1
                 k += 1
     return (real_x, real_fx)
 
 
 def SVNS(n: int, neighborhoods: list, maxTime: (15 * 60), alpha: int):
-    x = np.random.permutation(n)
+    x = np.random.choice(m,n,replace=False)
     fx = float('inf')
     #fx = fitness(x)
     #print("Starting RVNS")
@@ -278,7 +284,7 @@ def SVNS(n: int, neighborhoods: list, maxTime: (15 * 60), alpha: int):
 
 
 
-def VNS_Real(size: int, nList: list, maxTime = 100):
+def VNS_Real(Size: int, nList: list, maxTime = 100):
     i = 0
     startTime = time.time()
     nSize = len(nList)
@@ -286,7 +292,7 @@ def VNS_Real(size: int, nList: list, maxTime = 100):
     #print("GRASP starts")
     #best = GRASP(size, 3)
     print("VNS starts")
-    s = np.random.permutation(size)
+    s = np.random.choise(m, size, replace=False)
     best = (s,float('inf'))
     shakedSol = []
     bestShakedSol = []
@@ -351,7 +357,12 @@ def nextMovementNeighbor(l,n):
             curr = nextList.insert(j,curr)
             yield nextList
             nextList = list(copy(l))
-            
+
+def nextAddNeighbor(l,n):
+    for i in range(m):
+        for j in range(len(l)):
+            l[j] = (l[j] + i) % m 
+        yield l
 
 def swap(l,i,j):
     l[i],l[j] = l[j], l[i]
@@ -516,13 +527,13 @@ def Local_SearchOnRange(neighborhoodList: list, sol: list, firstBestResult= Fals
 ##     Pour choisir une instance: 
 ##     Modifier instance_num ET RIEN D'AUTRE    
 ##-------------------------------------------------------
-nbOfInstances = 2
+nbOfInstances = 10
 nbOfThreads = cpu_count()
 res = []
 
 
 
-nbOfMinutes = 5
+nbOfMinutes = 20 * 9
 maxTime = (nbOfMinutes*60)/(nbOfInstances-1)
 print("Allowing " + str(maxTime) + " seconds for each instances")
 
@@ -542,19 +553,22 @@ for i in range(1,nbOfInstances):
     # Removes the randomness, for testing purpuses
     #np.random.seed(0)
     # Max 15 min -> 10 instance : (15* 60)/10 for each
+    instance_num= i    #### Entre 1 et 9 inclue
     print("_-" * 36)
-    print("-_"*15 + " INSTANCE: " + str(9) +"-_" * 15)
+    print("-_"*15 + " INSTANCE: " + str(instance_num) +"-_" * 15)
     print("_-" * 36)
-    instance_num= 9    #### Entre 1 et 9 inclue
+    
     backend_name,circuit_type,num_qubit=instance_selection(instance_num)
     backend,qc,qr=instance_characteristic(backend_name,circuit_type,num_qubit)
-
+    
     n=num_qubit
-    m=backend.num_qubits
+    global m 
+    m = backend.num_qubits
     alpha = 1 +  m/n
-    res.append(RVNS(n,[nextInversionNeighbor,nextPermutationNeighbor],maxTime))
-    #print("Alpha= " + str(alpha))
-    #res.append(SVNS(n,[nextInversionNeighbor,nextPermutationNeighbor],maxTime, alpha))
+    
+    res.append(RVNS(m,n,[nextInversionNeighbor,nextPermutationNeighbor,nextAddNeighbor],maxTime))
+    print("Alpha= " + str(alpha))
+    #res.append(SVNS(n,[nextAddNeighbor,nextInversionNeighbor,nextPermutationNeighbor],maxTime, alpha))
     
     
 print("\n" * 10)
@@ -571,15 +585,14 @@ else:
     print("Keep YourThread Safe")
 
 
-
-""" 900 sec
-1: 47 | 47
-2: 46 | 69
+""" 1500 sec
+1: 47 | 42
+2: 46 | 59
 3: 67 | 68
-4: 68 | 74
-5: 57 |         
-6: 90 | 
-7: 23 | 50      (1500 sec)
+4: 68 | 73
+5: 57 | 97      
+6: 90 | 83
+7: 23 | 38      (1500 sec)
 8: 30 | 52
 9: 43 | 53
 
