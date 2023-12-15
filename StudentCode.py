@@ -5,10 +5,9 @@ Created on Tue Nov 14 11:08:40 2023
 @author: Jérôme
 """
 
-import copy
 import numpy as np
-import matplotlib.pyplot as plt
 from multiprocessing import Process
+from numpy._typing import NDArray
 from qiskit import QuantumCircuit
 from qiskit.transpiler import Layout
 from qiskit.transpiler.preset_passmanagers import generate_preset_pass_manager
@@ -80,7 +79,7 @@ def instance_selection(instance_num):
 ##     Pour choisir une instance: 
 ##     Modifier instance_num ET RIEN D'AUTRE    
 ##-------------------------------------------------------
-instance_num=7     #### Entre 1 et 9 inclue
+instance_num=1     #### Entre 1 et 9 inclue
 
 backend_name,circuit_type,num_qubit=instance_selection(instance_num)
 backend,qc,qr=instance_characteristic(backend_name,circuit_type,num_qubit)
@@ -97,231 +96,6 @@ m=backend.num_qubits
 # Depuis ce code, on sait que la solution est de la forme [0,1,2,...,n-1].
 # On peut donc tester la fonction fitness sur cette solution et optimiser son resultat.
 # La metaheuristique ne doit se baser que sur le layout et la fonction fitness.
-import threading
-import numpy as np
-
-def hill_climbing(layout, neigborhood_generation_method, size_tabu_list=10, nb_it=10):
-    """
-    The algorithm will generate a neighborhood from the best neighbor found
-    In the case we will have a better solution than the best so far, then we update it
-    The method 
-    """
-
-    best_fitness = fitness(layout) #initial solution -> the randomized layout
-    best_layout = layout
-    tabu_list = np.array([layout])
-    best_neighbor = best_layout
-    for _ in range(nb_it):
-        neighborhood = gen_neighborhood(best_neighbor, neigborhood_generation_method)
-        best_neighbor = best_layout
-        best_neighbor_fitness = fitness(best_neighbor)
-
-        for neighbor in neighborhood:
-            candidate_fitness = fitness(neighbor)
-            if candidate_fitness < best_neighbor_fitness and neighbor not in tabu_list:
-                best_neighbor = neighbor
-                best_neighbor_fitness = candidate_fitness
-
-        if best_fitness > best_neighbor_fitness:
-            best_layout = best_neighbor
-            best_fitness = best_neighbor_fitness
-        
-        append(tabu_list, best_neighbor, size_tabu_list)
-   
-    return best_layout
-
-
-
-def append(tabu_list, element, size):
-    if len(tabu_list) == size:
-        np.delete(tabu_list, 0)
-    np.append(tabu_list, element)
-
-def swap(l, i, j):
-    temp = l[i]
-    l[i] = l[j]
-    l[j] = temp
-
-
-def gen_neighborhood(layout, func):
-    neighborhood = np.array(func(layout))
-    neighborhood[neighborhood != None]
-    neighborhood_i = np.array(list(map(lambda x : fitness(x), neighborhood))).argsort()
-    neighborhood[neighborhood_i]
-    
-    return neighborhood
-
-def gen_neighborhood_inversion(layout):
-    neighborhood = [None] * (len(layout) - 1)
-
-    for i in range(0, len(layout) - 1):
-        curr_neighbor = copy.copy(layout)
-        swap(curr_neighbor, i, i + 1)
-        neighborhood[i] = curr_neighbor
-    
-    return neighborhood
-
-def gen_neighborhood_transposition(layout):
-    neighborhood = [None] * len(layout)
-
-    for i in range(len(layout)):
-        for j in range(len(layout)):
-            curr_neighbor = copy.copy(layout)
-            swap(curr_neighbor, i, j)
-            neighborhood[i] = curr_neighbor
-    print(f"permutation => {neighborhood}")
-    return neighborhood
-
-def gen_neighborhood_moving(layout):
-    neighborhood = [None] * len(layout)
-
-    for i in range(len(layout)):
-        for j in range(len(layout)):
-            curr_neighbor = copy.copy(layout)
-            element = curr_neighbor[j]
-            curr_neighbor = np.delete(curr_neighbor, j)
-            curr_neighbor = np.insert(curr_neighbor, i, element)
-            neighborhood[i] = curr_neighbor
-
-    return neighborhood
-
-"""
-def cross(layout_1, layout_2):
-    first_part_1 = np.random.choice(len(layout_1), len(layout_1) // 2, replace=False)
-    first_part_1.sort()
-    
-    first_part_2 = [i for i in range(len(layout_1)) if i not in first_part_1]
-    first_part_2.sort()
-    
-    child_1 = [None] * len(layout_1)
-    child_2 = copy.copy(child_1)
-    
-    for i in range(len(first_part_1)):
-        child_1[first_part_1[i]] = layout_1[first_part_1[i]]
-        child_2[first_part_2[i]] = layout_1[first_part_2[i]]
-
-
-    for i in range(len(child_1)):
-        if child_1[i] == None:
-            for j in range(len(layout_2)):
-                if layout_2[j] not in child_1:
-                    child_1[i] = layout_2[j]
-                    break   
-    
-    for i in range(len(child_2)):
-        if child_2[i] == None:
-            for j in range(len(layout_2)):
-                if layout_2[j] not in child_2:
-                    child_2[i] = layout_2[j]
-                    break 
-
-    if fitness(child_1) < fitness(child_2):
-        return child_1
-    return child_2
-"""
-
-def new_cross(layout):
-    """
-    The goal is to get new values inside one vector
-    by generating random index with wich we'll generate 
-    random values that are not currently present inside 
-    the vector.
-    """
-    index_generated = np.sort(np.random.choice(len(layout), len(layout) // 2, replace=False))
-
-    #complement_index = set(range(len(layout) // 2))
-    #complement_index = sorted(list(complement_index.symmetric_difference(set(index_generated))))
-    complement_index = [i for i in range(len(layout)) if i not in index_generated]
-    generated_numbers = []
-    new_layout = copy.copy(layout)
-    rng = np.random.default_rng()
-    for i in range(len(layout) // 2):
-        generated_number = rng.integers(m)
-        while generated_number in layout[complement_index] or generated_number in generated_numbers:
-            generated_number = rng.integers(m)
-        new_layout[index_generated[i]] = generated_number
-        generated_numbers.append(generated_number)
-
-    return new_layout
-
-
-def thread_task(id_thread, gen_neighborhood_method, nb_it, length_list, solutions, best_solution_so_far):
-    for i in range(nb_it, -1, -1):
-        print(f"Started thread : {id_thread} with the current solution {solutions[id_thread]}")
-        solutions[id_thread]= hill_climbing(solutions[id_thread], gen_neighborhood_inversion, i % length_list)
-       
-        print("--------------------------------------------------------------------")
-        print(f"thread : {id_thread} has found the solution {solutions[id_thread]}")
-        print(f"n={n}, m={m} et fitness_test={fitness(solutions[id_thread])}. Instance {instance_num} ok !")
-        print(f"length of the tabu list : {length_list}, nb_it : {nb_it}, neighborhood_method : {gen_neighborhood_method}")
-        print("--------------------------------------------------------------------")
-        if(fitness(best_solution_so_far) > fitness(solutions[id_thread])):
-            print(f"UPDATED SOLUTION SO FAR : from {best_solution_so_far} -> {solutions[id_thread]}")
-            best_solution_so_far = solutions[id_thread]
-       # solutions_sorted_i = np.array(list(map(lambda x : fitness(x), solutions))).argsort()
-        #chosen_solution_for_cross = np.random.choice(len(solutions) - 1, 1, replace=False)
-        solutions[id_thread] = np.array(np.random.rand(m).argsort().tolist()[0:n])
-        #solutions[id_thread] = cross(solutions[solutions_sorted_i[0]], solutions[solutions_sorted_i[1]])
-
-
-def test_length(max_len_list): 
-    layout = list(range(n))
-    threads = [None] * (max_len_list - 2) 
-    for i in range(0, max_len_list - 2):
-        t_layout = copy.copy(layout)
-        np.random.shuffle(layout)
-        threads[i] = threading.Thread(target=thread_task, args=(i + 2, t_layout))
-        threads[i].start()
-    
-    [threads[i].join() for i in range(0,max_len_list - 2)]
-
-def tabu_search_multi_threading(nb_threads=10):
-    layout = np.array(list(range(n)))
-    np.random.shuffle(layout)
-
-    threads = [None] * (nb_threads)
-
-    solutions = copy.copy(threads)
-
-    for i in range(nb_threads):
-        solutions[i] = np.array(np.random.rand(m).argsort().tolist()[0:n])
-
-    methods = [gen_neighborhood_inversion, gen_neighborhood_moving, gen_neighborhood_transposition]
-    
-    for i in range(len(threads)):
-        threads[i] = Process(target=thread_task, args=(i, gen_neighborhood_transposition, 5, 10, solutions, layout))
-        threads[i].start()
-        
-    [threads[i].join() for i in range(nb_threads)]
-
-    print(f"The best solution found => {layout} for a total cost of {fitness(layout)}")
-            
-for i in range(1,10):
-    print(f"-----------------------------INSTANCE {i}--------------------------------------")
-    instance_num=i     #### Entre 1 et 9 inclue
-
-    backend_name,circuit_type,num_qubit=instance_selection(instance_num)
-    backend,qc,qr=instance_characteristic(backend_name,circuit_type,num_qubit)
-
-    n=num_qubit
-    m=backend.num_qubits
-    tabu_search_multi_threading(5)
-
-"""
-best_layout = hill_climbing(layout, gen_neighborhood_inversion)
-print(f"{best_layout}")
-print(f"n={n}, m={m} et fitness_test={fitness(best_layout)}. Instance {instance_num} ok !")
-best_layout = hill_climbing(layout, gen_neighborhood_moving)
-print(f"{best_layout}")
-print(f"n={n}, m={m} et fitness_test={fitness(best_layout)}. Instance {instance_num} ok !")
-best_layout = hill_climbing(layout, gen_neighborhood_transposition)
-print(f"{best_layout}")
-print(f"n={n}, m={m} et fitness_test={fitness(best_layout)}. Instance {instance_num} ok !")
-"""
-
-#best_layout = test(layout)
-
-
 ###### A faire : un algo d'optimisation qui minimise la fonction fitness,
 ###### fonction qui accepte en entrée :
 ###### une liste de n parmi m (n<=m) entiers deux à deux distincts
@@ -351,4 +125,141 @@ print(f"n={n}, m={m} et fitness_test={fitness(best_layout)}. Instance {instance_
 #
 #
 #
+
+import time
+import numpy as np
+from multiprocessing import Process, Lock, Array
+
+
+mutex = Lock()
+
+def gen_neighborhood(n, a, ith_permutation)->None:
+    """
+    will generate the ith permutation from an @initial_solution.
+
+    This function use the iterative heap algorithm for more space efficiency.
+    I FORGOT THAT NUMPY HAS ALREADY ONE METHOD FOR THIS FUUUUUCK
+    """
+    c = [0] * n
+    i = 1
+    nb_perm = 0
+    while i < n:
+        if nb_perm == ith_permutation:
+            return a
+
+        if c[i] < i:
+            if i & 1:
+                a[c[i]], a[i] = a[i], a[c[i]]
+            else:
+                a[0], a[i] = a[i], a[0]
+
+            nb_perm += 1
+            c[i] += 1
+            i = 1
+        else:
+            c[i] = 0
+            i += 1
+
+
+def process_task(neighborhood, i, best_solution_so_far):
+    neighbor = gen_neighborhood(n, np.copy(neighborhood), np.random.randint(n, size=1)) #shake
+    print(f"process {i} has found the neighbor : {neighbor}")
+    print(f"started local search...")
+    current_solution = simulated_annealing(neighbor)
+    current_solution_cost = fitness(current_solution)
+
+    neighborhood_cost = fitness(neighborhood)
+
+    if current_solution_cost < neighborhood_cost:
+        print(f"best neighbor found for process {i} ! from {neighborhood}, {fitness(neighborhood)} to {current_solution}, {current_solution_cost}")
+        for i in range(n):
+            neighborhood[i] = current_solution[i]
+        neighborhood_cost = current_solution_cost
+    
+    with mutex:
+        print("je passe")
+        if neighborhood_cost < fitness(best_solution_so_far): #update best sol if better sol
+            print(f"best solution changed ! from {fitness(best_solution_so_far)} -> {neighborhood_cost} ")
+            for i in range(n):
+                best_solution_so_far[i] = neighborhood[i]
+
+        
+
+def vns(m, n, number_of_neighborhood=5, max_time=120):
+    """
+    Variable neighborhood search in wich the simulated annealing is used for local search
+    #TODO make on different processes
+    """
+    st = time.time()
+
+    neighborhood_set = np.array([np.random.RandomState().choice(m, n, replace=False) for _ in range(number_of_neighborhood)])    
+    shared_neighborhood_set = [Array('i', range(n))] * number_of_neighborhood
+    for i in range(number_of_neighborhood):
+        for j in range(n):
+            shared_neighborhood_set[i][j] = neighborhood_set[i][j]
+    best_solution_so_far = neighborhood_set[0]
+    shared_best_solution = Array('i', range(n))
+    for i in range(n):
+        shared_best_solution[i] = best_solution_so_far[i]
+    
+    while (time.time() - st) < max_time:
+        print(f"one big iteration, curr_time : {time.time() - st}")
+
+        p = [Process(target=process_task, args=(shared_neighborhood_set[i], i, shared_best_solution)) for i in range(number_of_neighborhood)]
+
+        for i in range(number_of_neighborhood):
+            print(f"Started process {i} with the current neighborhood : {neighborhood_set[i]}")
+            p[i].start()
+        
+        [p[i].join() for i in range(number_of_neighborhood)]
+
+        best_solution_so_far = np.frombuffer(shared_best_solution.get_obj(), dtype=np.int32)
+        print(f"#################the best soltion found {best_solution_so_far} ########################")
+
+    return best_solution_so_far
+
+
+def simulated_annealing(initial_solution, initial_temperature : float = 100, minimal_temperature : float = 0.1, step : int = 5, coef : float = 0.8):
+    best_solution_so_far = initial_solution
+    fitness_best_solution = fitness(best_solution_so_far)
+
+    while initial_temperature > minimal_temperature:
+        
+        for _ in range(step):
+    
+            neighbor = np.random.permutation(best_solution_so_far)
+            fitness_neighbor = fitness(neighbor)
+            delta_E = fitness_neighbor - fitness_best_solution
+            
+            if delta_E <= 0 or np.exp(delta_E/initial_temperature) > np.random.uniform(0, 1):
+                best_solution_so_far = neighbor
+                fitness_best_solution = fitness_neighbor
+        
+        initial_temperature *= coef
+
+    return best_solution_so_far
+
+def main():
+    NB_PROCESS = 8
+    MAX_TIME=120
+    """ 
+    for i in range(1,10):
+        instance_num = i
+        print(f"-----------------------{i}TH INSTANCE-----------------------")
+        backend_name,circuit_type,num_qubit=instance_selection(instance_num)
+        backend,qc,qr=instance_characteristic(backend_name,circuit_type,num_qubit)
+
+        n=num_qubit
+        m=backend.num_qubits
+        solution_found = vns(m, n, NB_PROCESS, MAX_TIME)
+        print(f"BEST SOLUTION FOUND FOR INSTANCE {i} : {solution_found}")
+
+    """
+    solution_found = vns(m, n, NB_PROCESS, MAX_TIME)
+    print(f"BEST SOLUTION FOUND FOR INSTANCE 1 : {solution_found}")
+
+
+
+if __name__ == "__main__":
+    main()
 
