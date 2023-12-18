@@ -172,16 +172,18 @@ def distance(perm1: list, perm2: list) -> int:
             res += 1
     return res
 
-def RVNS(m:int, n:int, neighborhoods: list, maxTime= 100000, nbOfThreads=6, allowPanic = True):
+def RVNS(m:int, n:int, neighborhoods: list, maxTime= 100000, nbOfThreads=9, allowPanic = True):
     print("Starting RVNS with " + str(nbOfThreads) +" threads allowed")
-
-    x = np.random.choice(m,n,replace=False)
+    local_random_seed = np.random.RandomState()
+    x = local_random_seed.choice(m,n,replace=False)
     
     #stuckSince = 0
     #lastUnstuck = 0
     #divCount = 0
     #maxDiv = 1
     notMoved = 0
+    base_Panic = 15 
+    current_PanicDetector = base_Panic
     #fx = fitness(x)
     fx = float('inf')
     real_x, real_fx = x,fx
@@ -191,14 +193,24 @@ def RVNS(m:int, n:int, neighborhoods: list, maxTime= 100000, nbOfThreads=6, allo
     startTime = time.time()
     while(time.time()-startTime < maxTime):
         k = 0
-        if allowPanic and notMoved > 25:
+        if allowPanic and notMoved >= current_PanicDetector:
                 notMoved = 0
+                if not current_PanicDetector <= 10:        
+                    current_PanicDetector = current_PanicDetector // 2
                 print("=-" * 100)
                 print("Start Panic/Diversification Mode")
-                (x,fx) = DiversificationRVNS(m,n,neighborhoods,50,nbOfThreads//2)
+                (x,fx) = DiversificationRVNS(m,n,neighborhoods,40,3)
                 print("Stop Diversification")
                 print("=-"*100)
                 print(x,fx)
+                if(fx < real_fx):
+                    current_PanicDetector = base_Panic
+                    real_x,real_fx = x,fx
+                    print("_" * 20)
+                    print("New Solution:")
+                    print("x = " + str(x))
+                    print("fx = " + str(fx))
+
         while(k < len(neighborhoods) and time.time() - startTime < maxTime):
             
 
@@ -217,6 +229,7 @@ def RVNS(m:int, n:int, neighborhoods: list, maxTime= 100000, nbOfThreads=6, allo
                 k = 0
                 notMoved = 0
                 if(fx < real_fx):
+                    current_PanicDetector = base_Panic
                     real_x,real_fx = x,fx
                     print("_" * 20)
                     print("New Solution:")
@@ -228,21 +241,25 @@ def RVNS(m:int, n:int, neighborhoods: list, maxTime= 100000, nbOfThreads=6, allo
     return (real_x, real_fx)
 
 
-def DiversificationRVNS(m:int, n:int, neighborhoods: list, maxTime= 100, nbOfThreads=3):
-    Q = Queue()
-    processes = []
-    for i in range(nbOfThreads):
-        p = NewProcess(Q, functToCall=RVNS, args=(m,n,neighborhoods,maxTime,nbOfThreads))
-        processes.append(p)
-        p.start()
-    currMin = float('inf')
-    currBestList = []
-    for i in range(nbOfThreads):
-        curr = Q.get()
+def DiversificationRVNS(m:int, n:int, neighborhoods: list, maxTime= 100, nbOfThreads=4):
+    startTime = time.time()
+    while time.time() - startTime < maxTime:
         
-        if (curr[1] < currMin):
-            currMin = curr[1]
-            currBestList = curr[0]
+
+        Q = Queue()
+        processes = []
+        for i in range(nbOfThreads):
+            p = NewProcess(Q, functToCall=RVNS, args=(m,n,neighborhoods,maxTime/4,nbOfThreads))
+            processes.append(p)
+            p.start()
+        currMin = float('inf')
+        currBestList = []
+        for i in range(nbOfThreads):
+            curr = Q.get()
+        
+            if (curr[1] < currMin):
+                currMin = curr[1]
+                currBestList = curr[0]
     return (currBestList, currMin)
 
 
@@ -262,21 +279,23 @@ def SVNS(n: int, neighborhoods: list, maxTime: (15 * 60), alpha: int):
     while(time.time() - startTime < maxTime):
         k = 0
         while k < len(neighborhoods) and time.time() - startTime < maxTime:
+            print("k: " + str(k))
             s = ShakeSol(x,neighborhoods[k])
             #best_s,f_bs = Local_Search(neighborhoods[k], s, len(s), True)
-            best_s,f_bs = Local_SearchWithProcess(neighborhoods[k], s, len(s), 4)
+            best_s,f_bs = Local_SearchWithProcess(neighborhoods[k], s, len(s), 15)
             print(best_s,f_bs)
             #best_s,f_bs = s, fitness(s)
             if( f_bs - (alpha * distance(x,best_s)) < fx ):
             #if( f_bs - (alpha * np.abs(f_bs - fx)) < fx ):
                 x = best_s
                 fx = f_bs
-                k = 0
                 if(fx < real_fx):
+                    k = 0
                     real_x,real_fx = x,fx
                     print("New Best Sol:")
                     print("x = " + str(x))
                     print("fx = " + str(fx))
+                    
             else:
                 k+= 1
             
@@ -368,11 +387,13 @@ def nextMovementNeighbor(l,n):
             nextList = list(copy(l))
 
 def nextAddNeighbor(l,n):
-    fake_m = np.random.randint(5,m)
-    for i in range(fake_m):
+    nextList = list(copy(l))
+    
+    for i in range(1,m):
         for j in range(len(l)):
-            l[j] = (l[j] + i) % m 
-        yield l
+            nextList[j] = (nextList[j] + i) % m 
+        yield nextList
+
 
 def swap(l,i,j):
     l[i],l[j] = l[j], l[i]
@@ -488,17 +509,17 @@ def Local_SearchOnRange(neighborhoodList: list, sol: list, firstBestResult= Fals
     currBestList = sol
     currMin = fitness(sol)
     for i in range(len(neighborhoodList)):
-
+        
         curr = fitness(neighborhoodList[i])
-
+        
         if(curr < currMin):
 
             currBestList = neighborhoodList[i]
             currMin = curr
             if(firstBestResult):
                 return (currBestList,curr)
-
-    return (currBestList,curr)
+    
+    return (currBestList,currMin)
         
 
 ###### A faire : un algo d'optimisation qui minimise la fonction fitness,
@@ -537,14 +558,14 @@ def Local_SearchOnRange(neighborhoodList: list, sol: list, firstBestResult= Fals
 ##     Pour choisir une instance: 
 ##     Modifier instance_num ET RIEN D'AUTRE    
 ##-------------------------------------------------------
-nbOfInstances = 2
+nbOfInstances = 10
 nbOfThreads = cpu_count()
 res = []
 
 
 
-nbOfMinutes = 15
-maxTime = (nbOfMinutes*60)/(nbOfInstances-1)
+nbOfMinutes = 10
+maxTime = ((nbOfMinutes)*60)/(nbOfInstances-1)
 print("Allowing " + str(maxTime) + " seconds for each instances")
 
 """
@@ -564,21 +585,24 @@ for i in range(1,nbOfInstances):
     # Removes the randomness, for testing purpuses
     #np.random.seed(0)
     # Max 15 min -> 10 instance : (15* 60)/10 for each
-    instance_num= 2    #### Entre 1 et 9 inclue
+    instance_num= i    #### Entre 1 et 9 inclue
     print("_-" * 36)
     print("-_"*15 + " INSTANCE: " + str(instance_num) +"-_" * 15)
     print("_-" * 36)
     
     backend_name,circuit_type,num_qubit=instance_selection(instance_num)
     backend,qc,qr=instance_characteristic(backend_name,circuit_type,num_qubit)
-    f = open("./results/resInst_" + str(instance_num), "w")
+    f = open("./results/SVNS_1", "a")
 
     n=num_qubit
     global m 
     m = backend.num_qubits
-    alpha = 1 +  m/n
-    res = RVNS(m,n,[nextInversionNeighbor,nextPermutationNeighbor],maxTime)
-    f.write(str(res) + "\n" + ("_-_"*40) +"\n")
+    alpha = 8
+    res = RVNS(m,n,[nextPermutationNeighbor,nextInversionNeighbor,nextAddNeighbor],maxTime)
+    #res = SVNS(n,[nextInversionNeighbor,nextInversionNeighbor,nextAddNeighbor],maxTime,alpha)
+    f.write(("-=" * 10) + "Instances " + str(instance_num) + ("=-" * 10) + "\n")
+    f.write(str(res) + "\n")
+    
     print(res)
     #res.append(RVNS(m,n,[nextInversionNeighbor,nextPermutationNeighbor,nextAddNeighbor],maxTime))
     #print("Alpha= " + str(alpha))
@@ -588,12 +612,12 @@ for i in range(1,nbOfInstances):
 
 
 
-""" 1500 sec
-1: 47 | 42
-2: 46 | 59
-3: 67 | 68
-4: 68 | 73
-5: 57 | 97      
+""" 1800 sec
+1: 47 | 41
+2: 46 | 57
+3: 67 | 59
+4: 68 | 78
+5: 57 | 75      
 6: 90 | 83
 7: 23 | 38      (1500 sec)
 8: 30 | 52
