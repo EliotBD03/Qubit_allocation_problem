@@ -186,7 +186,7 @@ Current best results :
 n=20, m=27 et fitness_test=63. Instance 1 ok !
 """
 target = 22
-def simulated_annealing(layout, T=1, alpha=0.99, time_limit=10, return_results=[], qr=qr, qc=qc, backend=backend, _type=1, instance=1, m=m, cur_layout=0, nbr_process=-1):
+def simulated_annealing(layout, T=1, alpha=0.99, time_limit=10, return_results=[], qr=qr, qc=qc, backend=backend, _type=1, instance=1, m=m, cur_layout=0, nbr_process=-1, path="./outputs2/"):
     """
     Simulated annealing algorithm for the layout problem
 
@@ -212,6 +212,9 @@ def simulated_annealing(layout, T=1, alpha=0.99, time_limit=10, return_results=[
         The type of simulated annealing to use. The default is 1 (swap two elements, intensification). Other values are 2 (generate a new random layout, diversification).
     """
     print(f"Starting simulated annealing... Type : {_type}. Instance {instance}")
+    local_seed = np.random.RandomState()
+    local_seed.seed()
+    np.random.seed(local_seed.randint(0, 1000000000))
     layout1 = layout.copy()
     T_copy = deepcopy(T)
     fitness1 = fitness(layout1, qr=qr, qc=qc, backend=backend)
@@ -241,13 +244,16 @@ def simulated_annealing(layout, T=1, alpha=0.99, time_limit=10, return_results=[
         if new_fitness1 < fitness1 or rand_values.pop() < np.exp((fitness1 - new_fitness1) / T_copy):
             layout1, fitness1 = new_layout1, new_fitness1
             bests_list.append((layout1, fitness1))
-            with open(f"./outputs2/output_{instance}.txt", "a") as file:
+            with open(f"{path}output_{instance}.txt", "a") as file:
                 file.write(f"{layout1}\n")
                 file.write(f"n={n}, m={m} et fitness_test={fitness1}. Instance {instance} !\n----------------\n")
             if fitness1 < best_fitness:
                 best_fitness, best_layout = fitness1, layout1
 
-        T_copy *= alpha
+        T_copy *= alpha # cooling
+        if T_copy == 0:
+            # Restart the algorithm
+            T_copy = T
 
     if return_results is not None:
         return_results.extend(bests_list)
@@ -493,22 +499,22 @@ def multi_thread_simulated_annealing_intensification(bests, T=1, alpha=0.99, tim
     print(f"Final best layout and cost : {min(end_results, key=lambda x: x[0][1])}")
 #multi_thread_simulated_annealing_intensification(bests, T=1, alpha=0.8, time_limit=100)
 
-def run_all_instances(time=100):
+def run_all_instances(time=100, path="./outputs2/"):
     print("Running all instances...")
     processes = []
     for instance_num in range(1, 10):
-        processes.append(Process(target=run_instance, args=(deepcopy(instance_num), time)))
+        processes.append(Process(target=run_instance, args=(deepcopy(instance_num), time, path)))
         processes[-1].start()
     for instance_num, process in enumerate(processes):
         process.join()
-        with open(f"./outputs2/output_{instance_num+1}.txt", "r") as file:
+        with open(f"{path}output_{instance_num+1}.txt", "r") as file:
             content = file.read()
         date = datetime.now().isoformat()
         with open(f"./outputs_instance{instance_num+1}/log_{date}.txt", "w") as file:
             file.write(content)
     print("All instances done !")
 
-def run_instance(instance_num, time=500):
+def run_instance(instance_num, time=500, path="./outputs2/"):
     print(f"Running instance {instance_num}...")
     backend_name,circuit_type,num_qubit=instance_selection(instance_num)
     backend,qc,qr=instance_characteristic(backend_name,circuit_type,num_qubit)
@@ -522,7 +528,7 @@ def run_instance(instance_num, time=500):
     # Generate the layouts, we restrain each threads to a certain interval to limit the number of duplicates
     layouts = [np.random.choice(m - (n * i), n, replace=False) for i in range(nbr_layouts)]
 
-    file = open(f"./outputs2/output_{instance_num}.txt", "w")
+    file = open(f"{path}output_{instance_num}.txt", "w")
     # f1 = fitness(layout, qr=qr, qc=qc, backend=backend)
     # file.write(f"Random : f{layout}\n")
     # file.write(f"n={n}, m={m} et fitness_test={f1}. Instance {instance_num} ok !\n----------------\n")
@@ -538,7 +544,7 @@ def run_instance(instance_num, time=500):
     processes = []
     queue = Queue()
     for i in range(process_count):
-        processes.append(NewProcess(queue, args=(layouts[i % nbr_layouts], 10, 0.9, time, bests[i], qr, qc, backend, 2, instance_num, m, i % nbr_layouts, process_count)))
+        processes.append(NewProcess(queue, args=(layouts[i % nbr_layouts], 1000, 0.8, time / 2, bests[i], qr, qc, backend, 2, instance_num, m, i % nbr_layouts, process_count, path)))
         processes[-1].start()
     [process.join() for process in processes]
 
@@ -547,7 +553,7 @@ def run_instance(instance_num, time=500):
     for i in range(process_count):
         bests += queue.get()
 
-    file = open(f"./outputs2/output_{instance_num}.txt", "a")
+    file = open(f"{path}output_{instance_num}.txt", "a")
 
     print(f"Diversification done for instance {instance_num} !")
     file.write(f"Diversification done for instance {instance_num} !\n")
@@ -557,28 +563,28 @@ def run_instance(instance_num, time=500):
     best_layouts = bests[:process_count]
     print(f"Best layouts : {best_layouts}")
 
-    bests_diversification = [[] for _ in range(min(process_count, len(best_layouts)))]
-    file.write(f"\n\nStarting threads for diversification of bests adding 1...\n")
-    print("Starting threads...")
-    file.write(f"\nBests : {best_layouts}\n")
-    file.write(f"Divsersification starting ----------------\n")
-    file.close()
-    for i in range(min(len(bests), process_count)):
-        processes.append(NewProcess(queue, args=(best_layouts[i][0], 10, 0.9, time, bests_diversification[i], qr, qc, backend, 3, instance_num, m, 0, process_count)))
-        processes[-1].start()
-    [process.join() for process in processes]
-
-    file = open(f"./outputs2/output_{instance_num}.txt", "a")
-    file.write(f"Divsersification done for instance {instance_num} !\n")
-
-    # Merge the results of the threads
-    bests = []
-    for i in range(process_count):
-        bests += queue.get()
-
-    bests.sort(key=lambda x: x[1])
-
-    best_layouts = bests[:process_count]
+    # bests_diversification = [[] for _ in range(min(process_count, len(best_layouts)))]
+    # file.write(f"\n\nStarting threads for diversification of bests adding 1...\n")
+    # print("Starting threads...")
+    # file.write(f"\nBests : {best_layouts}\n")
+    # file.write(f"Divsersification starting ----------------\n")
+    # file.close()
+    # for i in range(min(len(bests), process_count)):
+    #     processes.append(NewProcess(queue, args=(best_layouts[i][0], 100, 0.8, time, bests_diversification[i], qr, qc, backend, 3, instance_num, m, 0, process_count)))
+    #     processes[-1].start()
+    # [process.join() for process in processes]
+    #
+    # file = open(f"./outputs2/output_{instance_num}.txt", "a")
+    # file.write(f"Divsersification done for instance {instance_num} !\n")
+    #
+    # # Merge the results of the threads
+    # bests = []
+    # for i in range(process_count):
+    #     bests += queue.get()
+    #
+    # bests.sort(key=lambda x: x[1])
+    #
+    # best_layouts = bests[:process_count]
 
     bests_intensification = [[] for _ in range(min(process_count, len(best_layouts)))]
     file.write(f"\n\nStarting threads for intensification of 5 bests...\n")
@@ -590,11 +596,11 @@ def run_instance(instance_num, time=500):
     processes = []
     queue = Queue()
     for i in range(min(process_count, len(best_layouts))):
-        processes.append(NewProcess(queue, args=(best_layouts[i][0], 1, 0.9, time * 2, bests_intensification[i], qr, qc, backend, 1, instance_num, m, 0, process_count)))
+        processes.append(NewProcess(queue, args=(best_layouts[i][0], 1, 0.9, time / 2, bests_intensification[i], qr, qc, backend, 1, instance_num, m, 0, process_count, path)))
         processes[-1].start()
     [process.join() for process in processes]
 
-    file = open(f"./outputs2/output_{instance_num}.txt", "a")
+    file = open(f"{path}output_{instance_num}.txt", "a")
 
     file.write(f"Intensification done for instance {instance_num} !\n")
 
@@ -701,7 +707,7 @@ date = datetime.now().isoformat()
 #         file.write(content)
 
 try:
-    run_all_instances(200)
+    run_all_instances(1480, "./outputs_25min/")
 except KeyboardInterrupt:
     print("KeyboardInterrupt !")
     # Kill all the processes
