@@ -98,7 +98,8 @@ instance_num=7     #### Entre 1 et 9 inclue
 
 backend_name,circuit_type,num_qubit=instance_selection(instance_num)
 backend,qc,qr=instance_characteristic(backend_name,circuit_type,num_qubit)
-
+global n 
+global m
 n=num_qubit
 m=backend.num_qubits
 
@@ -705,7 +706,7 @@ date = datetime.now().isoformat()
 #         content = file.read()
 #     with open(f"./outputs_instance{instance_num}/log_{date}.txt", "w") as file:
 #         file.write(content)
-
+"""
 try:
     run_all_instances(1480, "./outputs_25min/")
 except KeyboardInterrupt:
@@ -713,7 +714,7 @@ except KeyboardInterrupt:
     # Kill all the processes
     for process in active_children():
         process.terminate()
-
+"""
 # run_instance(7, 20)
 
 # while best > target:
@@ -778,4 +779,62 @@ except KeyboardInterrupt:
 #
 #
 #
+def GeneticAlgorithm(nb_of_init_sol = 2, nb_of_process= 10, maxTime = 100):
+    print("n: " + str(n))
+    print("m: " + str(m))
+    t = 10          # t = maxIteration (replace with time)
+    population_size = 5 
+    i = 1 
+    while(i < t):
+        # Apply the operator on the two parent schedules chosen randomly
+        # to produce two offsprings and 
+        # replace the parent by the two best out of the 4.
+        Crossbreeding(list(range(1,n)), list(range(1,n)))
+        i += 1
 
+def Crossbreeding(parent1:list, parent2: list):
+    
+    # Adapted the 2-point 
+    # Start cut (-1 because we at least want one element changed)
+    sCut = np.random.randint(0,len(parent1)-1)
+    # End cut (must be bigger than start cut)
+    eCut = np.random.randint(sCut+1, len(parent1))
+    # Between the sCut and eCut, we need to get the order from the other parent
+    # Quick reminders : l[sCut:eCut] get btw sCut and eCut
+    # l[:sCut] get before sCut
+    # l[eCut:] get after eCut
+    # Create child 1
+    inBtw = parent1[sCut:eCut]
+    child1 =  parent1[:sCut]
+    for i in range(len(parent2)):
+        if(contains(inBtw,parent2[i])):
+            child1 = np.append(child1, parent2[i])
+            inBtw = np.setdiff1d(inBtw, parent2[i])
+            
+    child1 = np.append(child1, inBtw)
+    child1 = np.append(child1, parent1[eCut:])
+
+    
+    # Create child 2
+    inBtw = parent2[sCut:eCut]
+    child2 =  parent2[:sCut]
+    for i in range(len(parent1)):
+        if(contains(inBtw,parent1[i])):
+            child1 = np.append(child2, parent1[i])
+            inBtw = np.setdiff1d(inBtw, parent1[i])
+    child2 = np.append(child2, inBtw)
+    child2 = np.append(child2, parent2[eCut:])
+    
+
+    print(child1)
+    print(child2)
+    print(sCut,eCut)
+
+def contains(l: list, data : int):
+    for i in range(len(l)):
+        if l[i] == data:
+            print("contains")
+            return True 
+    return False
+
+GeneticAlgorithm()
