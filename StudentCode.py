@@ -575,7 +575,7 @@ def run_instance(instance_num, time=500, path="./outputs2/"):
     bests = []
     queue = Queue()
     for i in range(process_count):
-        processes.append(NewGeneticProcess(queue, args=(n, m, process_count, time//2, qr, qc, backend)))
+        processes.append(NewGeneticProcess(queue, args=(n, m, process_count, time//4, qr, qc, backend, path)))
         processes[-1].start()
     [process.join() for process in processes]
 
@@ -627,7 +627,7 @@ def run_instance(instance_num, time=500, path="./outputs2/"):
     processes = []
     queue = Queue()
     for i in range(min(process_count, len(best_layouts))):
-        processes.append(NewProcess(queue, args=(best_layouts[i][0], 1, 0.9, time / 2, bests_intensification[i], qr, qc, backend, 1, instance_num, m, 0, process_count, path)))
+        processes.append(NewProcess(queue, args=(best_layouts[i][0], 1, 0.9, 3 * time // 4, bests_intensification[i], qr, qc, backend, 1, instance_num, m, 0, process_count, path)))
         processes[-1].start()
     [process.join() for process in processes]
 
@@ -785,7 +785,7 @@ def GCA(n:int, m:int,nb_of_process= 10, maxTime = 100, qr=qr, qc=qc, backend=bac
         
     
 
-def GeneticAlgorithm(n:int,m:int,nb_of_process= 10, maxTime = 100, qr=qr, qc=qc, backend=backend):
+def GeneticAlgorithm(n:int,m:int,nb_of_process= 10, maxTime = 100, qr=qr, qc=qc, backend=backend, path="./outputs2/"):
     # Set special seed
     local_random_seed = np.random.RandomState()
 
@@ -794,8 +794,6 @@ def GeneticAlgorithm(n:int,m:int,nb_of_process= 10, maxTime = 100, qr=qr, qc=qc,
     # Get initial population
     population_size = nb_of_process
     # t = maxIteration (replace with time)
-    t = 10
-    i = 1
     init_sols = []
     for _ in range(population_size):
         sol = deepcopy(local_random_seed.choice(m,n, replace=False))
@@ -803,23 +801,29 @@ def GeneticAlgorithm(n:int,m:int,nb_of_process= 10, maxTime = 100, qr=qr, qc=qc,
 
 
 
-    while i < t and time.time() - start_time < maxTime:
+    while time.time() - start_time < maxTime:
         
         parents = [0,0]
         while parents[0] == parents[1] and time.time() - start_time < maxTime:
             parents = np.random.randint(0,population_size, size= 2)
+            with open(f"{path}output_{instance_num}.txt", "a") as file:
+                file.write(f"Parents : {parents}\n")
         
         child1,child2 = Crossbreeding(init_sols[parents[0]][0], init_sols[parents[1]][0])
         fc1,fc2 = fitness(child1, qr=qr, qc=qc, backend=backend), fitness(child2, qr=qr, qc=qc, backend=backend)
         if fc1 < init_sols[parents[0]][1]: 
             init_sols[parents[0]][0] = child1
             init_sols[parents[0]][1] = fc1
+            with open(f"{path}output_{instance_num}.txt", "a") as file:
+                file.write(f"Child 1 : {child1}\n")
+                file.write(f"n={n}, m={m} et fitness_test={fc1}. Instance {instance_num} !\n----------------\n")
         if fc2 < init_sols[parents[1]][1]:
             init_sols[parents[1]][0] = child2
             init_sols[parents[1]][1] = fc2
+            with open(f"{path}output_{instance_num}.txt", "a") as file:
+                file.write(f"Child 2 : {child2}\n")
+                file.write(f"n={n}, m={m} et fitness_test={fc2}. Instance {instance_num} !\n----------------\n")
 
-
-        i += 1
     return init_sols
 
 
@@ -877,7 +881,7 @@ def contains(l: list, data : int):
 
 
 try:
-    run_all_instances(200, "./outputs_5min/")
+    run_all_instances(1470, "./outputs_25min_gc/")
     #print(GCA(n,m))
 except KeyboardInterrupt:
     print("KeyboardInterrupt !")
