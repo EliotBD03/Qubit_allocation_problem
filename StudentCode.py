@@ -41,6 +41,20 @@ class NewProcessVNS(Process):
         except KeyboardInterrupt:
             pass
 
+class NewGeneticProcess(Process):
+    def __init__(self, queue: Queue, args = ()):
+        super().__init__()
+        self.daemon = True
+        self.queue = queue
+        self.args = args
+
+    def run(self):
+        try:
+            res = GeneticAlgorithm(*self.args)
+            self.queue.put(res)
+        except KeyboardInterrupt:
+            pass
+
 
 ##-------------------------------------------------------
 ##     Selection de l'instance du probleme
@@ -94,12 +108,10 @@ def instance_selection(instance_num):
 ##     Pour choisir une instance: 
 ##     Modifier instance_num ET RIEN D'AUTRE    
 ##-------------------------------------------------------
-instance_num=7     #### Entre 1 et 9 inclue
+instance_num=1     #### Entre 1 et 9 inclue
 
 backend_name,circuit_type,num_qubit=instance_selection(instance_num)
 backend,qc,qr=instance_characteristic(backend_name,circuit_type,num_qubit)
-global n 
-global m
 n=num_qubit
 m=backend.num_qubits
 
@@ -166,6 +178,7 @@ def generate_new_layout_add(layout, m, cur_layout):
 # print(f"n={n}, m={m} et fitness_test={fitness(layout)}. Instance {instance_num} ok !")
 #
 def hill_climbing(layout, goal, qr, qc, backend, time_limit):
+    
     best_fitness = fitness(layout, qr, qc, backend)
     best_layout = layout
     start_time = time.time()
@@ -245,9 +258,11 @@ def simulated_annealing(layout, T=1, alpha=0.99, time_limit=10, return_results=[
         if new_fitness1 < fitness1 or rand_values.pop() < np.exp((fitness1 - new_fitness1) / T_copy):
             layout1, fitness1 = new_layout1, new_fitness1
             bests_list.append((layout1, fitness1))
-            with open(f"{path}output_{instance}.txt", "a") as file:
-                file.write(f"{layout1}\n")
-                file.write(f"n={n}, m={m} et fitness_test={fitness1}. Instance {instance} !\n----------------\n")
+            print(f"{layout1}\n")
+            print(f"n={n}, m={m} et fitness_test={fitness1}. Instance {instance} !\n----------------\n")
+            #with open(f"{path}output_{instance}.txt", "a") as file:
+            #    file.write(f"{layout1}\n")
+            #    file.write(f"n={n}, m={m} et fitness_test={fitness1}. Instance {instance} !\n----------------\n")
             if fitness1 < best_fitness:
                 best_fitness, best_layout = fitness1, layout1
 
@@ -438,7 +453,7 @@ def _multi_thread_simulated_annealing(layout, ex, reduction, current_fitness, ta
         The target fitness of the layout.
     """
     while current_fitness > target_fitness and ex > 0.01:
-        # Generate a new layout
+        # Generate a new layout10
         results = simulated_annealing_iteration(layout, 10, ex, 0.9, qr, qc, backend)
 
         # Get the new layout and fitness
@@ -541,6 +556,7 @@ def run_instance(instance_num, time=500, path="./outputs2/"):
     file.write(f"Diversification starting ----------------\n")
     file.close()
     process_count = 10
+    
     bests = [[] for _ in range(process_count)]
     processes = []
     queue = Queue()
@@ -706,54 +722,7 @@ date = datetime.now().isoformat()
 #         content = file.read()
 #     with open(f"./outputs_instance{instance_num}/log_{date}.txt", "w") as file:
 #         file.write(content)
-"""
-try:
-    run_all_instances(1480, "./outputs_25min/")
-except KeyboardInterrupt:
-    print("KeyboardInterrupt !")
-    # Kill all the processes
-    for process in active_children():
-        process.terminate()
-"""
-# run_instance(7, 20)
 
-# while best > target:
-#     try:
-#         best = run_instance(7, 300)
-#         if best > target:
-#             print(f"Best : {best}. Retrying...")
-#             # Copy the content of the output file to a log file
-#             with open(f"./outputs/output_{instance_num}.txt", "r") as file:
-#                 content = file.read()
-#             date = datetime.now().isoformat()
-#             with open(f"./outputs_instance{instance_num}/log_{date}.txt", "w") as file:
-#                 file.write(content)
-#     # Intercept the KeyboardInterrupt exception to stop the program
-#     except KeyboardInterrupt:
-#         print("KeyboardInterrupt !")
-#         # Kill all the processes
-#         for process in active_children():
-#             process.terminate()
-#         break
-#
-
-#########################
-# TODO : Make this work #
-#########################
-# for instance_num in range(1, 10):
-#     backend_name,circuit_type,num_qubit=instance_selection(instance_num)
-#     backend,qc,qr=instance_characteristic(backend_name,circuit_type,num_qubit)
-#
-#     n=num_qubit
-#     layout = np.random.permutation(n)
-#
-#     multi_thread_simulated_annealing(layout, 10, 0.9, 8, instance=instance_num)
-
-
-###### A faire : un algo d'optimisation qui minimise la fonction fitness,
-###### fonction qui accepte en entrée :
-###### une liste de n parmi m (n<=m) entiers deux à deux distincts
-###### N'oubliez pas d'écrire la solution dans [GROUPE]_instance_[instance_num].txt
 
 ###### /!\ Attention /!\
 ###### Il est possible que la ligne 40 : qasmfile=f".\Instances\{l.rstrip()}.qasm"
@@ -761,44 +730,95 @@ except KeyboardInterrupt:
 ###### en particulier sous Linux. Essayer de la remplacer par
 ###### qasmfile=f"./Instances/{l.rstrip()}.qasm". Cela devrait résoudre le problème.
 
-###### Voici un test (à supprimer !) pour s'assurer que tout va bien
-# for i in range(1,10):
-#     instance_num=i     #### Entre 1 et 9 inclue
-#
-#     backend_name,circuit_type,num_qubit=instance_selection(instance_num)
-#     backend,qc,qr=instance_characteristic(backend_name,circuit_type,num_qubit)
-#
-#     print(f"Instance {instance_num} : {backend_name}, {circuit_type}, {num_qubit} qubits")
-#     print(f"qc : {qc.draw()}")
-#     print(f"qr : {qr}")
-#
-#     n=num_qubit
-#     m=backend.num_qubits
-#     r=fitness(list(range(n)))
-#     print(f"n={n}, m={m} et fitness_test={r}. Instance {instance_num} ok !")
-#
-#
-#
-def GeneticAlgorithm(nb_of_init_sol = 2, nb_of_process= 10, maxTime = 100):
-    print("n: " + str(n))
-    print("m: " + str(m))
-    t = 10          # t = maxIteration (replace with time)
-    population_size = 5 
-    i = 1 
+def GCA(n:int, m:int,nb_of_process= 10, maxTime = 100):
+    processes = []
+    minimums = []
+    q = Queue()
+
+    for i in range(nb_of_process):
+        minimums.append([[],float('inf')])
+        print("P" + str(i) + " started")
+        p = NewGeneticProcess(q, (n,m,nb_of_process,100))
+        p.start()
+        processes.append(p)
+    for i in range(nb_of_process):
+        res = q.get()
+        print("P" + str(i) + " finished")
+        # Check if its better than the current minimums
+        for j in range(len(res)):
+            # If it's better than one of the minimums we swap
+            for k in range(len(minimums)):
+                if minimums[k][1] > res[k][1]:
+                    minimums[k][1] = res[k][1]
+                    minimums[k][0] = deepcopy(res[k][0])
+                    break 
+    # Minimums now has the best starting solutions found
+    # Start SA algorithm for worker nodes
+    processes = []
+    for i in range(nb_of_process):
+        print(minimums[i])
+    for i in range(nb_of_process):
+        p = Process(target=simulated_annealing, args=((minimums[i][0],)))
+        p.start()
+        processes.append(p)
+    for i in range(nb_of_process):
+        processes[i].join()
+    
+    return minimums
+    
+    
+            
+        
+    
+
+def GeneticAlgorithm(n:int,m:int,nb_of_process= 10, maxTime = 100):
+    # Set special seed
+    local_random_seed = np.random.RandomState()
+
+    # Get initial population
+    population_size = nb_of_process
+    # t = maxIteration (replace with time)
+    t = 10
+    i = 1
+    init_sols = []
+    for j in range(population_size):
+        sol = deepcopy(local_random_seed.choice(m,n, replace=False))
+        init_sols.append([sol, fitness(sol)])
+
+
+
     while(i < t):
-        # Apply the operator on the two parent schedules chosen randomly
-        # to produce two offsprings and 
-        # replace the parent by the two best out of the 4.
-        Crossbreeding(list(range(1,n)), list(range(1,n)))
+        
+        parents = [0,0]
+        while(parents[0] == parents[1]):
+            parents = np.random.randint(0,population_size, size= 2)
+        
+        child1,child2 = Crossbreeding(init_sols[parents[0]][0], init_sols[parents[1]][0])
+        fc1,fc2 = fitness(child1),fitness(child2)
+        if(fc1 < init_sols[parents[0]][1]):
+            
+            init_sols[parents[0]][0] = child1
+            init_sols[parents[0]][1] = fc1
+        if(fc2 < init_sols[parents[1]][1]):
+            init_sols[parents[1]][0] = child2
+            init_sols[parents[1]][1] = fc2
+
+
         i += 1
+    return init_sols
+
+
+
+
 
 def Crossbreeding(parent1:list, parent2: list):
-    
+
     # Adapted the 2-point 
     # Start cut (-1 because we at least want one element changed)
     sCut = np.random.randint(0,len(parent1)-1)
     # End cut (must be bigger than start cut)
     eCut = np.random.randint(sCut+1, len(parent1))
+    #print(str(sCut) + " ; " + str(eCut))
     # Between the sCut and eCut, we need to get the order from the other parent
     # Quick reminders : l[sCut:eCut] get btw sCut and eCut
     # l[:sCut] get before sCut
@@ -810,31 +830,42 @@ def Crossbreeding(parent1:list, parent2: list):
         if(contains(inBtw,parent2[i])):
             child1 = np.append(child1, parent2[i])
             inBtw = np.setdiff1d(inBtw, parent2[i])
-            
+      
     child1 = np.append(child1, inBtw)
     child1 = np.append(child1, parent1[eCut:])
 
     
     # Create child 2
     inBtw = parent2[sCut:eCut]
-    child2 =  parent2[:sCut]
+    child2 = parent2[:sCut]
     for i in range(len(parent1)):
         if(contains(inBtw,parent1[i])):
-            child1 = np.append(child2, parent1[i])
+            child2 = np.append(child2, parent1[i])
             inBtw = np.setdiff1d(inBtw, parent1[i])
+    
     child2 = np.append(child2, inBtw)
     child2 = np.append(child2, parent2[eCut:])
-    
 
-    print(child1)
-    print(child2)
-    print(sCut,eCut)
+    #print("-"*30)
+    #print("p 1:" + str(parent1))
+    #print("p 2:" + str(parent2))
+    #print("child 1:" + str(child1))
+    #print("child 2:" + str(child2))
+    return (child1, child2)
 
 def contains(l: list, data : int):
     for i in range(len(l)):
         if l[i] == data:
-            print("contains")
-            return True 
+            #print("contains")
+            return True
     return False
 
-GeneticAlgorithm()
+
+try:
+    #run_all_instances(1480, "./outputs_5min/")
+    GCA(n,m)
+except KeyboardInterrupt:
+    print("KeyboardInterrupt !")
+    # Kill all the processes
+    for process in active_children():
+        process.terminate()
