@@ -192,11 +192,7 @@ def hill_climbing(layout, goal, qr, qc, backend, time_limit):
             best_layout = new_layout
     return (best_layout, best_fitness)
 
-"""
-Current best results :
-[19, 9, 16, 10, 4, 1, 5, 14, 12, 7, 15, 3, 11, 2, 0, 18, 13, 8, 17, 6]
-n=20, m=27 et fitness_test=63. Instance 1 ok !
-"""
+
 def simulated_annealing(layout, T=1, alpha=0.99, time_limit=10, return_results=[], qr=qr, qc=qc, backend=backend, _type=1, instance=1, m=m, cur_layout=0, nbr_process=-1, path="./outputs2/"):
     """
     Simulated annealing algorithm for the layout problem
