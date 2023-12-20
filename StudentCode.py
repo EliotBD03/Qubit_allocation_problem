@@ -258,11 +258,11 @@ def simulated_annealing(layout, T=1, alpha=0.99, time_limit=10, return_results=[
         if new_fitness1 < fitness1 or rand_values.pop() < np.exp((fitness1 - new_fitness1) / T_copy):
             layout1, fitness1 = new_layout1, new_fitness1
             bests_list.append((layout1, fitness1))
-            print(f"{layout1}\n")
-            print(f"n={n}, m={m} et fitness_test={fitness1}. Instance {instance} !\n----------------\n")
-            #with open(f"{path}output_{instance}.txt", "a") as file:
-            #    file.write(f"{layout1}\n")
-            #    file.write(f"n={n}, m={m} et fitness_test={fitness1}. Instance {instance} !\n----------------\n")
+            #print(f"{layout1}\n")
+            #print(f"n={n}, m={m} et fitness_test={fitness1}. Instance {instance} !\n----------------\n")
+            with open(f"{path}output_{instance}.txt", "a") as file:
+                file.write(f"{layout1}\n")
+                file.write(f"n={n}, m={m} et fitness_test={fitness1}. Instance {instance} !\n----------------\n")
             if fitness1 < best_fitness:
                 best_fitness, best_layout = fitness1, layout1
 
@@ -557,15 +557,29 @@ def run_instance(instance_num, time=500, path="./outputs2/"):
     file.close()
     process_count = 10
     
-    bests = [[] for _ in range(process_count)]
+    # bests = [[] for _ in range(process_count)]
+    # processes = []
+    # queue = Queue()
+    # for i in range(process_count):
+    #     processes.append(NewProcess(queue, args=(layouts[i % nbr_layouts], 1000, 0.8, time / 2, bests[i], qr, qc, backend, 2, instance_num, m, i % nbr_layouts, process_count, path)))
+    #     processes[-1].start()
+    # [process.join() for process in processes]
+    #
+    # # Merge the results of the threads
+    # bests = []
+    # for i in range(process_count):
+    #     bests += queue.get()
+    #
+
     processes = []
+    bests = []
     queue = Queue()
     for i in range(process_count):
-        processes.append(NewProcess(queue, args=(layouts[i % nbr_layouts], 1000, 0.8, time / 2, bests[i], qr, qc, backend, 2, instance_num, m, i % nbr_layouts, process_count, path)))
+        processes.append(NewGeneticProcess(queue, args=(n, m, process_count, time//2, qr, qc, backend)))
         processes[-1].start()
     [process.join() for process in processes]
 
-    # Merge the results of the threads
+
     bests = []
     for i in range(process_count):
         bests += queue.get()
@@ -730,7 +744,7 @@ date = datetime.now().isoformat()
 ###### en particulier sous Linux. Essayer de la remplacer par
 ###### qasmfile=f"./Instances/{l.rstrip()}.qasm". Cela devrait résoudre le problème.
 
-def GCA(n:int, m:int,nb_of_process= 10, maxTime = 100):
+def GCA(n:int, m:int,nb_of_process= 10, maxTime = 100, qr=qr, qc=qc, backend=backend):
     processes = []
     minimums = []
     q = Queue()
@@ -738,7 +752,7 @@ def GCA(n:int, m:int,nb_of_process= 10, maxTime = 100):
     for i in range(nb_of_process):
         minimums.append([[],float('inf')])
         print("P" + str(i) + " started")
-        p = NewGeneticProcess(q, (n,m,nb_of_process,100))
+        p = NewGeneticProcess(q, (n,m,nb_of_process,maxTime, qr, qc, backend))
         p.start()
         processes.append(p)
     for i in range(nb_of_process):
@@ -771,9 +785,11 @@ def GCA(n:int, m:int,nb_of_process= 10, maxTime = 100):
         
     
 
-def GeneticAlgorithm(n:int,m:int,nb_of_process= 10, maxTime = 100):
+def GeneticAlgorithm(n:int,m:int,nb_of_process= 10, maxTime = 100, qr=qr, qc=qc, backend=backend):
     # Set special seed
     local_random_seed = np.random.RandomState()
+
+    start_time = time.time()
 
     # Get initial population
     population_size = nb_of_process
@@ -781,25 +797,24 @@ def GeneticAlgorithm(n:int,m:int,nb_of_process= 10, maxTime = 100):
     t = 10
     i = 1
     init_sols = []
-    for j in range(population_size):
+    for _ in range(population_size):
         sol = deepcopy(local_random_seed.choice(m,n, replace=False))
-        init_sols.append([sol, fitness(sol)])
+        init_sols.append([sol, fitness(sol, qr=qr, qc=qc, backend=backend)])
 
 
 
-    while(i < t):
+    while i < t and time.time() - start_time < maxTime:
         
         parents = [0,0]
-        while(parents[0] == parents[1]):
+        while parents[0] == parents[1] and time.time() - start_time < maxTime:
             parents = np.random.randint(0,population_size, size= 2)
         
         child1,child2 = Crossbreeding(init_sols[parents[0]][0], init_sols[parents[1]][0])
-        fc1,fc2 = fitness(child1),fitness(child2)
-        if(fc1 < init_sols[parents[0]][1]):
-            
+        fc1,fc2 = fitness(child1, qr=qr, qc=qc, backend=backend), fitness(child2, qr=qr, qc=qc, backend=backend)
+        if fc1 < init_sols[parents[0]][1]: 
             init_sols[parents[0]][0] = child1
             init_sols[parents[0]][1] = fc1
-        if(fc2 < init_sols[parents[1]][1]):
+        if fc2 < init_sols[parents[1]][1]:
             init_sols[parents[1]][0] = child2
             init_sols[parents[1]][1] = fc2
 
@@ -862,8 +877,8 @@ def contains(l: list, data : int):
 
 
 try:
-    #run_all_instances(1480, "./outputs_5min/")
-    GCA(n,m)
+    run_all_instances(200, "./outputs_5min/")
+    #print(GCA(n,m))
 except KeyboardInterrupt:
     print("KeyboardInterrupt !")
     # Kill all the processes
