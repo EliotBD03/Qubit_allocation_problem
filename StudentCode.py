@@ -242,7 +242,6 @@ def simulated_annealing(layout, T=1, alpha=0.99, time_limit=10, return_results=[
     best_layout = layout1
     bests_list = [(best_layout, best_fitness)]
 
-    rand_values = np.random.rand(int(time_limit * 10)).tolist()  # Precompute random values
 
     print(f"Simulated annealing starting for instance {instance}...")
 
@@ -262,7 +261,7 @@ def simulated_annealing(layout, T=1, alpha=0.99, time_limit=10, return_results=[
         new_fitness1 = fitness(new_layout1, qr=qr, qc=qc, backend=backend)
 
         # If the new layout is better, keep it, else keep it with a certain probability
-        if new_fitness1 < fitness1 or rand_values.pop() < np.exp((fitness1 - new_fitness1) / T_copy):
+        if new_fitness1 < fitness1 or np.random.randint(0,1,1) < np.exp((fitness1 - new_fitness1) / T_copy):
             layout1, fitness1 = new_layout1, new_fitness1
             bests_list.append((layout1, fitness1))
 
@@ -447,7 +446,7 @@ date = datetime.now().isoformat()
 
 try:
     # Run all the instances in parallel for 25 minutes (we keep 20 seconds off for the small instructions not counted in the time limit)
-    run_all_instances(1480, "./outputs_25_2min/")
+    run_all_instances(1480, "./outputs_25_2min/") 
 except KeyboardInterrupt:
     print("KeyboardInterrupt !")
     # Kill all the processes
