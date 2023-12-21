@@ -314,9 +314,10 @@ def run_all_instances(time=100, path="./outputs2/"):
             with open(f"{path}output_{instance_num+1}.txt", "r") as file:
                 content = file.read()
         date = datetime.now().isoformat()
-        if os.path.exists(f"./outputs_instance{instance_num+1}/") and content != "":
-            with open(f"./outputs_instance{instance_num+1}/log_{date}.txt", "w") as file:
-                file.write(content)
+        if not os.path.exists(f"./outputs_instance{instance_num+1}/"):
+            os.mkdir(f"outputs_instance{instance_num+1}")
+        with open(f"./outputs_instance{instance_num+1}/log_{date}.txt", "w") as file:
+            file.write(content)
     print("All instances done !")
 
 
