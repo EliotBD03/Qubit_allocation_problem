@@ -321,6 +321,16 @@ def run_all_instances(time=100, path="./outputs2/"):
     print("All instances done !")
 
 
+def format_solution(layout: list, fitness:int):
+    res = ""
+    for i in range(len(layout)):
+        res += str(layout[i]) + " "
+    res += str(fitness)
+    return res
+
+
+#print(format_solution(np.array([19, 16, 20, 22,  5, 12, 11, 23, 24, 26, 13,  8,  4, 17, 10,  9,  2, 25, 14,  6]), 42))
+
 def run_instance(instance_num, time=500, path="./outputs2/"):
     """
     Run an instance
@@ -418,6 +428,9 @@ def run_instance(instance_num, time=500, path="./outputs2/"):
     file.write(f"{i_results[0][0]}\n")
     file.write(f"n={n}, m={m} et fitness_test={i_results[0][1]}. Instance {instance_num} !\n----------------\n")
 
+    with open(f"5_Instance_{instance_num}.txt", 'w') as file1:
+        file1.write(format_solution(i_results[0][0], i_results[0][1]))
+
     print(f"Best layout found : {i_results[0]}")
 
     file.close()
@@ -441,13 +454,6 @@ except KeyboardInterrupt:
     for process in active_children():
         process.terminate()
 
-
-def format_solution(layout: list, fitness:int):
-    res = ""
-    for i in range(len(layout)):
-        res += str(layout[i]) + " "
-    res += str(fitness)
-    return res
 
 ###### A faire : un algo d'optimisation qui minimise la fonction fitness,
 ###### fonction qui accepte en entrée :
