@@ -358,7 +358,7 @@ def run_instance(instance_num, time=500, path="./outputs2/"):
     file.close()
 
     # Run the diversification in parallel
-    process_count = 10
+    process_count = 8
     bests = [[] for _ in range(process_count)]
     processes = []
     queue = Queue()
@@ -434,7 +434,7 @@ date = datetime.now().isoformat()
 
 try:
     # Run all the instances in parallel for 25 minutes (we keep 20 seconds off for the small instructions not counted in the time limit)
-    run_all_instances(1480, "./outputs_25min/")
+    run_all_instances(1480, "./outputs_25_2min/")
 except KeyboardInterrupt:
     print("KeyboardInterrupt !")
     # Kill all the processes
@@ -442,6 +442,12 @@ except KeyboardInterrupt:
         process.terminate()
 
 
+def format_solution(layout: list, fitness:int):
+    res = ""
+    for i in range(len(layout)):
+        res += str(layout[i]) + " "
+    res += str(fitness)
+    return res
 
 ###### A faire : un algo d'optimisation qui minimise la fonction fitness,
 ###### fonction qui accepte en entrée :
