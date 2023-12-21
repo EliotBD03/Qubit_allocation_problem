@@ -242,7 +242,7 @@ def simulated_annealing(layout, T=1, alpha=0.99, time_limit=10, return_results=[
     best_layout = layout1
     bests_list = [(best_layout, best_fitness)]
 
-
+    rand_values = np.random.rand(int(time_limit * 100)).tolist()
     print(f"Simulated annealing starting for instance {instance}...")
 
     start_time = time.time()
@@ -261,7 +261,7 @@ def simulated_annealing(layout, T=1, alpha=0.99, time_limit=10, return_results=[
         new_fitness1 = fitness(new_layout1, qr=qr, qc=qc, backend=backend)
 
         # If the new layout is better, keep it, else keep it with a certain probability
-        if new_fitness1 < fitness1 or np.random.randint(0,1,1) < np.exp((fitness1 - new_fitness1) / T_copy):
+        if new_fitness1 < fitness1 or rand_values.pop() < np.exp((fitness1 - new_fitness1) / T_copy):
             layout1, fitness1 = new_layout1, new_fitness1
             bests_list.append((layout1, fitness1))
 
@@ -304,7 +304,7 @@ def run_all_instances(time=100, path="./outputs2/"):
     """
     print("Running all instances...")
     processes = []
-    for instance_num in range(1, 10):
+    for instance_num in range(1,10):
         processes.append(Process(target=run_instance, args=(deepcopy(instance_num), time, path)))
         processes[-1].start()
     for instance_num, process in enumerate(processes):
